@@ -14,7 +14,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 
-import { Loader2, Save, Upload, ArrowLeft, Image as ImageIcon, X } from "lucide-react";
+import {
+  Loader2,
+  Save,
+  Upload,
+  ArrowLeft,
+  Image as ImageIcon,
+  X,
+} from "lucide-react";
 
 function fmtMUR(n?: number) {
   const x = Number.isFinite(Number(n)) ? Number(n) : 0;
@@ -30,14 +37,6 @@ function slugify(s: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-async function adminToken() {
-  const sess = await supabase.auth.getSession();
-  const token = sess.data.session?.access_token;
-  if (!token) throw new Error("Not logged in");
-  return token;
-}
-
-/** Premium recs */
 const RECOMMENDED = {
   aspect: "4:5",
   width: 1200,
@@ -46,8 +45,18 @@ const RECOMMENDED = {
   formats: "JPG / PNG / WebP",
 };
 
-type UploadedRow = { id: string; image_url: string; is_primary?: boolean };
-type PendingFile = { id: string; file: File; previewUrl: string; note?: string };
+type UploadedRow = {
+  id: string;
+  image_url: string;
+  is_primary?: boolean;
+};
+
+type PendingFile = {
+  id: string;
+  file: File;
+  previewUrl: string;
+  note?: string;
+};
 
 export default function AdminProductNewPage() {
   const router = useRouter();
@@ -76,25 +85,24 @@ export default function AdminProductNewPage() {
   const [seoTitle, setSeoTitle] = useState("");
   const [seoDescription, setSeoDescription] = useState("");
 
-  // after creation
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [images, setImages] = useState<UploadedRow[]>([]);
   const [pending, setPending] = useState<PendingFile[]>([]);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  // auto-slug while typing (but don’t overwrite if user manually edits slug)
   const [slugTouched, setSlugTouched] = useState(false);
+
   useEffect(() => {
     if (!slugTouched) setSlug(slugify(title));
   }, [title, slugTouched]);
 
-  // cleanup object URLs
   useEffect(() => {
     return () => {
-      for (const p of pending) URL.revokeObjectURL(p.previewUrl);
+      for (const p of pending) {
+        URL.revokeObjectURL(p.previewUrl);
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pending]);
 
   const flags = useMemo(() => {
     const list: Array<{ label: string; kind: "ok" | "pink" | "black" }> = [];
@@ -144,18 +152,22 @@ export default function AdminProductNewPage() {
     if (!s) return setErr("Slug is required.");
 
     setCreating(true);
+
     try {
-      const token = await adminToken();
       const res = await fetch("/api/admin/products/create", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
         body: JSON.stringify({
           title: t,
           slug: s,
           sku: sku.trim() || null,
           barcode: barcode.trim() || null,
           base_price_mur: Number(basePrice) || 0,
-          compare_at_price_mur: Number(compareAt) || 0,
+          compare_at_price_mur:
+            Number(compareAt) > 0 ? Number(compareAt) : null,
           is_active: Boolean(isActive),
           is_featured: Boolean(isFeatured),
           is_best_seller: Boolean(isBestSeller),
@@ -171,7 +183,9 @@ export default function AdminProductNewPage() {
       if (!res.ok) throw new Error(json?.error || "Failed to create product");
 
       const newId = json?.product?.id as string | undefined;
-      if (!newId) throw new Error("Create succeeded but no product id returned.");
+      if (!newId) {
+        throw new Error("Create succeeded but no product id returned.");
+      }
 
       setCreatedId(newId);
 
@@ -192,11 +206,19 @@ export default function AdminProductNewPage() {
     setErr(null);
 
     try {
-      for (let i = 0; i < pending.length; i++) {
-        const pf = pending[i];
+      const currentPending = [...pending];
+
+      for (let i = 0; i < currentPending.length; i++) {
+        const pf = currentPending[i];
         await uploadOne(productId, pf.file, i === 0 && images.length === 0);
-        removePending(pf.id);
       }
+
+      setPending((prev) => {
+        for (const p of prev) {
+          URL.revokeObjectURL(p.previewUrl);
+        }
+        return [];
+      });
     } catch (e: any) {
       setErr(e?.message || "Upload failed");
     } finally {
@@ -204,7 +226,11 @@ export default function AdminProductNewPage() {
     }
   }
 
-  async function uploadOne(productId: string, file: File, makePrimary: boolean) {
+  async function uploadOne(
+    productId: string,
+    file: File,
+    makePrimary: boolean
+  ) {
     const ext = file.name.split(".").pop() || "jpg";
     const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
     const path = `${productId}/${crypto.randomUUID()}.${safeExt}`;
@@ -214,15 +240,18 @@ export default function AdminProductNewPage() {
       upsert: false,
       contentType: file.type || undefined,
     });
+
     if (upErr) throw new Error(upErr.message);
 
     const { data: pub } = supabase.storage.from("products").getPublicUrl(path);
     const image_url = pub.publicUrl;
 
-    const token = await adminToken();
     const res = await fetch("/api/admin/products/add-image", {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
       body: JSON.stringify({
         product_id: productId,
         image_url,
@@ -233,6 +262,7 @@ export default function AdminProductNewPage() {
         storage_path: path,
       }),
     });
+
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to add image row");
 
@@ -325,6 +355,7 @@ export default function AdminProductNewPage() {
           <CardHeader>
             <CardTitle className="text-base text-black">Product Details</CardTitle>
           </CardHeader>
+
           <CardContent className="space-y-6">
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
@@ -348,7 +379,9 @@ export default function AdminProductNewPage() {
                   }}
                   placeholder="handmade-rose-soap"
                 />
-                <div className="text-xs text-black/45">URL: /shop/{slugify(slug || title)}</div>
+                <div className="text-xs text-black/45">
+                  URL: /shop/{slugify(slug || title)}
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -377,7 +410,9 @@ export default function AdminProductNewPage() {
                   value={basePrice}
                   onChange={(e) => setBasePrice(Number(e.target.value))}
                 />
-                <div className="text-xs text-black/50">Shown price: {fmtMUR(basePrice)}</div>
+                <div className="text-xs text-black/50">
+                  Shown price: {fmtMUR(basePrice)}
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -462,6 +497,7 @@ export default function AdminProductNewPage() {
                     onChange={(e) => setSeoTitle(e.target.value)}
                   />
                 </div>
+
                 <div className="space-y-1">
                   <Label className="text-black">SEO Description</Label>
                   <Input
@@ -488,10 +524,15 @@ export default function AdminProductNewPage() {
                 <ImageIcon className="h-4 w-4 text-black/60" />
                 Images
               </CardTitle>
+
               <div className="mt-1 text-[11px] leading-snug text-black/55">
-                Recommended: <span className="font-medium">{RECOMMENDED.width}×{RECOMMENDED.height}px</span>{" "}
+                Recommended:{" "}
+                <span className="font-medium">
+                  {RECOMMENDED.width}×{RECOMMENDED.height}px
+                </span>{" "}
                 (<span className="font-medium">{RECOMMENDED.aspect}</span>) •{" "}
-                <span className="font-medium">≤ {RECOMMENDED.maxMB}MB</span> • {RECOMMENDED.formats}
+                <span className="font-medium">≤ {RECOMMENDED.maxMB}MB</span> •{" "}
+                {RECOMMENDED.formats}
               </div>
             </div>
 
@@ -521,14 +562,16 @@ export default function AdminProductNewPage() {
           <CardContent className="space-y-3">
             {pending.length ? (
               <div className="space-y-2">
-                <div className="text-xs font-semibold text-black">Selected (ready to upload)</div>
+                <div className="text-xs font-semibold text-black">
+                  Selected (ready to upload)
+                </div>
+
                 {pending.map((p) => (
                   <div
                     key={p.id}
                     className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white p-2"
                   >
                     <div className="h-14 w-14 overflow-hidden rounded-xl border border-black/10 bg-black/[0.04]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={p.previewUrl}
                         alt=""
@@ -541,7 +584,8 @@ export default function AdminProductNewPage() {
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs text-black">{p.file.name}</div>
                       <div className="mt-1 text-[11px] text-black/55">
-                        {(p.file.size / 1024 / 1024).toFixed(2)}MB {p.note ? `• ${p.note}` : ""}
+                        {(p.file.size / 1024 / 1024).toFixed(2)}MB{" "}
+                        {p.note ? `• ${p.note}` : ""}
                       </div>
                     </div>
 
@@ -565,13 +609,13 @@ export default function AdminProductNewPage() {
             {images.length ? (
               <div className="space-y-2 pt-2">
                 <div className="text-xs font-semibold text-black">Uploaded</div>
+
                 {images.map((img) => (
                   <div
                     key={img.id}
                     className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white p-2"
                   >
                     <div className="h-14 w-14 overflow-hidden rounded-xl border border-black/10 bg-black/[0.04]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={img.image_url}
                         alt=""
@@ -623,7 +667,8 @@ export default function AdminProductNewPage() {
             )}
 
             <div className="text-[11px] text-black/50">
-              Tip: Use a clean background and consistent lighting for a luxury look. The first uploaded image becomes{" "}
+              Tip: Use a clean background and consistent lighting for a luxury look.
+              The first uploaded image becomes{" "}
               <span className="font-medium">Primary</span>.
             </div>
           </CardContent>

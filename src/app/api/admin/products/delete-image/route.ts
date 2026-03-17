@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 function deriveStoragePathFromPublicUrl(imageUrl: string, bucket: string) {
@@ -20,14 +20,14 @@ function deriveStoragePathFromPublicUrl(imageUrl: string, bucket: string) {
 
 export async function POST(req: Request) {
   try {
-    const admin = await requireAdmin(req);
-    if (!admin.ok) return NextResponse.json({ error: admin.error }, { status: 401 });
+    const admin = await requireAdmin();
+    if (!admin.ok) { return NextResponse.json({ error: admin.error }, { status: admin.status }); }
 
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     // 1) Read row first to know what to delete in storage
-    const { data: row, error: readErr } = await supabaseServer
+    const { data: row, error: readErr } = await supabaseAdmin
       .from("product_images")
       .select("id, product_id, image_url, storage_bucket, storage_path, is_primary")
       .eq("id", id)
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     // 2) Delete from storage (best effort)
     // If storagePath is missing, we still delete DB row.
     if (storagePath) {
-      const { error: storageErr } = await supabaseServer.storage.from(bucket).remove([storagePath]);
+      const { error: storageErr } = await supabaseAdmin.storage.from(bucket).remove([storagePath]);
       // If the file is already missing, you can choose to ignore error or throw.
       // I recommend: ignore "not found" style issues, throw for others.
       if (storageErr) {
@@ -54,13 +54,13 @@ export async function POST(req: Request) {
     }
 
     // 3) Delete DB row
-    const { error: delErr } = await supabaseServer.from("product_images").delete().eq("id", id);
+    const { error: delErr } = await supabaseAdmin.from("product_images").delete().eq("id", id);
     if (delErr) throw delErr;
 
     // 4) If the deleted image was primary, optionally promote another image as primary
     // (Optional premium behavior)
     if (row.is_primary && row.product_id) {
-      const { data: nextImg, error: nextErr } = await supabaseServer
+      const { data: nextImg, error: nextErr } = await supabaseAdmin
         .from("product_images")
         .select("id")
         .eq("product_id", row.product_id)
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         .maybeSingle();
 
       if (!nextErr && nextImg?.id) {
-        await supabaseServer.from("product_images").update({ is_primary: true }).eq("id", nextImg.id);
+        await supabaseAdmin.from("product_images").update({ is_primary: true }).eq("id", nextImg.id);
       }
     }
 
@@ -82,3 +82,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 });
   }
 }
+

@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    // ✅ Centralized admin validation
-    const admin = await requireAdmin(req);
+    const admin = await requireAdmin();
     if (!admin.ok) {
-      return NextResponse.json({ error: admin.error }, { status: 401 });
+      return NextResponse.json(
+        { error: admin.error },
+        { status: admin.status }
+      );
     }
 
     const body = await req.json();
@@ -20,7 +22,10 @@ export async function POST(req: Request) {
       sku: body.sku ?? null,
       barcode: body.barcode ?? null,
       base_price_mur: Number(body.base_price_mur ?? 0),
-      compare_at_price_mur: Number(body.compare_at_price_mur ?? 0),
+      compare_at_price_mur:
+        body.compare_at_price_mur === "" || body.compare_at_price_mur == null
+          ? null
+          : Number(body.compare_at_price_mur),
       is_active: Boolean(body.is_active ?? true),
       is_featured: Boolean(body.is_featured ?? false),
       is_best_seller: Boolean(body.is_best_seller ?? false),
@@ -39,11 +44,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Slug is required" }, { status: 400 });
     }
 
-    const { data: product, error } = await supabaseServer
-    .from("products")
-    .insert(payload)
-    .select("id,title,slug,is_active,is_featured,is_best_seller,created_at")
-    .single();
+    const { data: product, error } = await supabaseAdmin
+      .from("products")
+      .insert(payload)
+      .select("id,title,slug,is_active,is_featured,is_best_seller,created_at")
+      .single();
 
     if (error) throw error;
 
@@ -53,3 +58,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || "Failed" }, { status: 500 });
   }
 }
+

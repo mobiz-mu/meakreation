@@ -35,23 +35,56 @@ export default function AdminProductsPage() {
   const [items, setItems] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    async function init() {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (!alive) return;
+
+      if (error || !session?.access_token) {
+        setErr("Not logged in");
+        setToken(null);
+        return;
+      }
+
+      setToken(session.access_token);
+    }
+
+    init();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function load(nextQ?: string) {
+    if (!token) return;
+
     setLoading(true);
     setErr(null);
-    try {
-      const sess = await supabase.auth.getSession();
-      const token = sess.data.session?.access_token;
-      if (!token) throw new Error("Not logged in");
 
+    try {
       const qq = (typeof nextQ === "string" ? nextQ : q).trim();
+
       const res = await fetch(
         `/api/admin/products/list?q=${encodeURIComponent(qq)}&limit=150`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
 
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed");
+
       setItems(json.items ?? []);
     } catch (e: any) {
       setErr(e?.message || "Failed to load products");
@@ -62,9 +95,9 @@ export default function AdminProductsPage() {
   }
 
   useEffect(() => {
-    load("");
+    if (token) load("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [token]);
 
   const stats = useMemo(() => {
     const total = items.length;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ async function getAuthedUserId(req: Request) {
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) return null;
 
-  const { data, error } = await supabaseServer.auth.getUser(token);
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data?.user?.id) return null;
   return data.user.id;
 }
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     const authedUserId = await getAuthedUserId(req);
 
     // Fetch only what we need
-    const { data: order, error: oErr } = await supabaseServer
+    const { data: order, error: oErr } = await supabaseAdmin
       .from("orders")
       .select("id,order_no,user_id,total_mur,public_token,payment_status,status")
       .eq("id", orderId)
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
 
     if (!resp.ok) {
       // Log response for debugging, but don't leak provider secrets
-      await supabaseServer.from("payment_events").insert({
+      await supabaseAdmin.from("payment_events").insert({
         provider: "SPARK",
         merchant_transaction_id: merchantTransactionId,
         event_type: "CREATE_CHECKOUT",
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
 
     // Persist session (idempotent per order/provider)
     // With unique index (order_id, provider), repeated calls overwrite the session row.
-    const { error: psErr } = await supabaseServer
+    const { error: psErr } = await supabaseAdmin
       .from("payment_sessions")
       .upsert(
         {
@@ -144,7 +144,7 @@ export async function POST(req: Request) {
     if (psErr) throw psErr;
 
     // Mark order pending payment (keep fulfillment separate)
-    const { error: updErr } = await supabaseServer
+    const { error: updErr } = await supabaseAdmin
       .from("orders")
       .update({
         payment_method: "SPARK",
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
     if (updErr) throw updErr;
 
     // Record create event
-    await supabaseServer.from("payment_events").insert({
+    await supabaseAdmin.from("payment_events").insert({
       provider: "SPARK",
       merchant_transaction_id: merchantTransactionId,
       event_type: "CREATE_CHECKOUT",

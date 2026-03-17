@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 export async function GET(req: Request) {
   try {
-    const admin = await requireAdmin(req);
+    const admin = await requireAdmin();
 
     if (!admin.ok) {
       return NextResponse.json(
@@ -59,3 +59,4 @@ export async function GET(req: Request) {
     );
   }
 }
+

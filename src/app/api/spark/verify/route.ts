@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,7 @@ async function getAuthedUserId(req: Request) {
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) return null;
 
-  const { data, error } = await supabaseServer.auth.getUser(token);
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data?.user?.id) return null;
   return data.user.id;
 }
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     const userId = await getAuthedUserId(req);
 
-    const q = supabaseServer
+    const q = supabaseAdmin
       .from("orders")
       .select("order_no,user_id,public_token,status,payment_status,total_mur,paid_at,created_at")
       .limit(1);

@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const admin = await requireAdmin(req);
+    const admin = await requireAdmin();
     if (!admin.ok) {
       return NextResponse.json({ error: admin.error }, { status: 401 });
     }
@@ -42,3 +42,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

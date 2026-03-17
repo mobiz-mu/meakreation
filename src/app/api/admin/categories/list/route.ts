@@ -1,12 +1,12 @@
 // src/app/api/admin/categories/list/route.ts
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const guard = await requireAdmin(req);
+  const guard = await requireAdmin();
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const { searchParams } = new URL(req.url);
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   const offset = Math.max(Number(searchParams.get("offset") || 0), 0);
 
   // Adjust columns if your categories schema differs
-  let query = supabaseServer
+  let query = supabaseAdmin
     .from("categories")
     .select("id,name,slug,description,is_active,sort_order,created_at,updated_at", { count: "exact" })
     .order("sort_order", { ascending: true })
@@ -42,3 +42,4 @@ export async function GET(req: Request) {
     offset,
   });
 }
+

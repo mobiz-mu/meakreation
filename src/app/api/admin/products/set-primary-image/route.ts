@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 export async function POST(req: Request) {
   try {
-    const admin = await requireAdmin(req);
-    if (!admin.ok) return NextResponse.json({ error: admin.error }, { status: 401 });
+    const admin = await requireAdmin();
+    if (!admin.ok) { return NextResponse.json({ error: admin.error }, { status: admin.status }); }
 
     const { product_id, image_id } = await req.json();
 
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
     }
 
     // Ensure the image belongs to the product
-    const { data: img, error: imgErr } = await supabaseServer
+    const { data: img, error: imgErr } = await supabaseAdmin
       .from("product_images")
       .select("id, product_id")
       .eq("id", image_id)
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     }
 
     // Clear existing primary
-    const { error: clearErr } = await supabaseServer
+    const { error: clearErr } = await supabaseAdmin
       .from("product_images")
       .update({ is_primary: false })
       .eq("product_id", product_id);
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     if (clearErr) throw clearErr;
 
     // Set new primary
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabaseAdmin
       .from("product_images")
       .update({ is_primary: true })
       .eq("id", image_id)
@@ -50,3 +50,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 });
   }
 }
+

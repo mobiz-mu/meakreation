@@ -1,6 +1,6 @@
 // src/app/api/admin/categories/upsert/route.ts
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ function slugify(input: string) {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireAdmin(req);
+  const guard = await requireAdmin();
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const body = await req.json().catch(() => ({}));
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   // if creating, allow DB defaults for created_at
   if (id) payload.id = id;
 
-  const { data, error } = await supabaseServer
+  const { data, error } = await supabaseAdmin
     .from("categories")
     .upsert(payload, { onConflict: "id" })
     .select("id,name,slug,description,is_active,sort_order,created_at,updated_at")
@@ -58,3 +58,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, item: data });
 }
+

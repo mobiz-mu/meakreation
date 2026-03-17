@@ -1,23 +1,14 @@
-// src/lib/admin/requireAdmin.ts
 import { supabaseAdmin } from "@/lib/supabase/server-admin";
+import { getSupabaseServer } from "@/lib/supabase/server";
 
-export async function requireAdmin(req: Request) {
+export async function requireAdmin() {
   try {
-    const auth = req.headers.get("authorization") || "";
-    const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-
-    if (!token) {
-      return {
-        ok: false as const,
-        status: 401,
-        error: "Missing Authorization token",
-      };
-    }
+    const supabase = await getSupabaseServer();
 
     const {
       data: { user },
       error: userErr,
-    } = await supabaseAdmin.auth.getUser(token);
+    } = await supabase.auth.getUser();
 
     if (userErr || !user?.id) {
       return {
@@ -52,7 +43,7 @@ export async function requireAdmin(req: Request) {
     return {
       ok: true as const,
       uid: user.id,
-      role: adminRow.role ?? "admin",
+      role: adminRow.role ?? "ADMIN",
     };
   } catch (error: any) {
     console.error("requireAdmin error:", error);

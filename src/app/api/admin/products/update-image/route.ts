@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 export async function POST(req: Request) {
   try {
-    const admin = await requireAdmin(req);
-    if (!admin.ok) return NextResponse.json({ error: admin.error }, { status: 401 });
+    const admin = await requireAdmin();
+    if (!admin.ok) { return NextResponse.json({ error: admin.error }, { status: admin.status }); }
 
     const { id, patch } = await req.json();
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "No valid patch fields" }, { status: 400 });
     }
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabaseAdmin
       .from("product_images")
       .update(update)
       .eq("id", id)
@@ -36,3 +36,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 });
   }
 }
+

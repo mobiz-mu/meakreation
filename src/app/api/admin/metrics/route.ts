@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
+import { requireAdmin } from "@/lib/admin/requireAdmin";
+
+export const runtime = "nodejs";
 
 type MetricsResponse = {
   kpis: {
@@ -10,63 +13,35 @@ type MetricsResponse = {
     revenue_cod_pipeline_mur: number;
   };
   daily: Array<{
-    day: string; // YYYY-MM-DD
+    day: string;
     paid_orders: number;
     paid_revenue_mur: number;
     cod_orders: number;
   }>;
 };
 
-async function requireAdmin(req: Request) {
-  // Expecting client to pass Supabase access token (from supabase auth session) in Authorization header
-  // e.g. Authorization: Bearer <access_token>
-  const authHeader = req.headers.get("authorization") || "";
-  const token = authHeader.toLowerCase().startsWith("bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-
-  if (!token) return { ok: false as const, error: "Missing Authorization Bearer token" };
-
-  // Validate token and extract user id
-  const { data: userRes, error: userErr } = await supabaseServer.auth.getUser(token);
-  if (userErr || !userRes?.user) return { ok: false as const, error: "Invalid token" };
-
-  const uid = userRes.user.id;
-
-  // Check admin_users table
-  const { data: adminRow, error: adminErr } = await supabaseServer
-    .from("admin_users")
-    .select("user_id, role")
-    .eq("user_id", uid)
-    .maybeSingle();
-
-  if (adminErr) return { ok: false as const, error: adminErr.message };
-  if (!adminRow) return { ok: false as const, error: "Not an admin" };
-
-  return { ok: true as const, uid };
-}
-
-export async function GET(req: Request) {
+export async function GET(_req: Request) {
   try {
-    const admin = await requireAdmin(req);
+    const admin = await requireAdmin();
     if (!admin.ok) {
-      return NextResponse.json({ error: admin.error }, { status: 401 });
+      return NextResponse.json(
+        { error: admin.error },
+        { status: admin.status }
+      );
     }
 
-    // KPIs view (recommended). If you haven't created it, see SQL section below.
-    const { data: kpis, error: kErr } = await supabaseServer
+    const { data: kpis, error: kErr } = await supabaseAdmin
       .from("v_admin_kpis")
       .select("*")
       .single();
 
     if (kErr) throw kErr;
 
-    // Daily revenue view (last 30 days)
     const since = new Date();
     since.setDate(since.getDate() - 30);
-    const sinceISO = since.toISOString().slice(0, 10); // YYYY-MM-DD
+    const sinceISO = since.toISOString().slice(0, 10);
 
-    const { data: daily, error: dErr } = await supabaseServer
+    const { data: daily, error: dErr } = await supabaseAdmin
       .from("v_admin_revenue_daily")
       .select("day, paid_orders, paid_revenue_mur, cod_orders")
       .gte("day", sinceISO)
@@ -93,6 +68,9 @@ export async function GET(req: Request) {
     return NextResponse.json(res);
   } catch (err: any) {
     console.error("admin/metrics error:", err);
-    return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || "Failed" },
+      { status: 500 }
+    );
   }
 }

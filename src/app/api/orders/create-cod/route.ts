@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 
 type Item = { product_id: string; variant_id: string; qty: number };
 
@@ -29,7 +29,7 @@ export async function POST(req: Request) {
       p_items: items,
     };
 
-    const { data, error } = await supabaseServer.rpc("create_order_atomic_cod", payload);
+    const { data, error } = await supabaseAdmin.rpc("create_order_atomic_cod", payload);
     if (error) throw error;
 
     return NextResponse.json({ ok: true, ...data });

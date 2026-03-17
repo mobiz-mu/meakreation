@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { sendOrderEmail } from "@/lib/email/resend";
 import { paymentConfirmedHtml } from "@/lib/email/templates";
 
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 
     // 1) Idempotent event log (DB unique index protects duplicates)
     // If duplicate, ignore cleanly.
-    const evInsert = await supabaseServer.from("payment_events").insert({
+    const evInsert = await supabaseAdmin.from("payment_events").insert({
       provider: "SPARK",
       merchant_transaction_id: merchantTransactionId,
       event_type: "WEBHOOK",
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
     }
 
     // 2) Find payment session
-    const { data: session, error: sErr } = await supabaseServer
+    const { data: session, error: sErr } = await supabaseAdmin
       .from("payment_sessions")
       .select("id, order_id, status, merchant_transaction_id")
       .eq("merchant_transaction_id", merchantTransactionId)
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
     }
 
     // 3) Update payment session state
-    const { error: psErr } = await supabaseServer
+    const { error: psErr } = await supabaseAdmin
       .from("payment_sessions")
       .update({
         status: paymentStatus,
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
 
     // 4) Update order (only on success/fail; keep pending otherwise)
     if (paymentStatus === "PAID") {
-      const { error: oErr } = await supabaseServer
+      const { error: oErr } = await supabaseAdmin
         .from("orders")
         .update({
           status: "PAID", // or "PROCESSING" if you want paid but not fulfilled; your choice
@@ -139,7 +139,7 @@ export async function POST(req: Request) {
       if (oErr) throw oErr;
 
       // 5) Send email confirmation (after order is updated)
-      const { data: order, error: ordErr } = await supabaseServer
+      const { data: order, error: ordErr } = await supabaseAdmin
         .from("orders")
         .select("order_no,email,total_mur")
         .eq("id", session.order_id)
@@ -158,7 +158,7 @@ export async function POST(req: Request) {
         });
       }
     } else if (paymentStatus === "FAILED") {
-      await supabaseServer
+      await supabaseAdmin
         .from("orders")
         .update({
           payment_method: "SPARK",
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
         .eq("id", session.order_id);
     } else {
       // pending → optional: mark order as PENDING_PAYMENT
-      await supabaseServer
+      await supabaseAdmin
         .from("orders")
         .update({
           payment_method: "SPARK",

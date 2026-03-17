@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 function normalizeOptions(obj: any) {
@@ -16,8 +16,8 @@ function normalizeOptions(obj: any) {
 
 export async function POST(req: Request) {
   try {
-    const admin = await requireAdmin(req);
-    if (!admin.ok) return NextResponse.json({ error: admin.error }, { status: 401 });
+    const admin = await requireAdmin();
+    if (!admin.ok) { return NextResponse.json({ error: admin.error }, { status: admin.status }); }
 
     const body = await req.json();
 
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     };
 
     if (id) {
-      const { data, error } = await supabaseServer
+      const { data, error } = await supabaseAdmin
         .from("product_variants")
         .update(row)
         .eq("id", id)
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       if (error) throw error;
       return NextResponse.json({ ok: true, item: data });
     } else {
-      const { data, error } = await supabaseServer
+      const { data, error } = await supabaseAdmin
         .from("product_variants")
         .insert(row)
         .select("id,product_id,options_json,options_key,sku,price_mur,compare_at_price_mur,stock_qty,is_active,created_at,updated_at")
@@ -59,3 +59,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 });
   }
 }
+

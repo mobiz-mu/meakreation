@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const guard = await requireAdmin(req);
+  const guard = await requireAdmin();
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const body = await req.json().catch(() => ({}));
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
   const now = new Date().toISOString();
 
   for (const it of items) {
-    const { error } = await supabaseServer
+    const { error } = await supabaseAdmin
       .from("categories")
       .update({ sort_order: Number(it.sort_order), updated_at: now })
       .eq("id", it.id);
@@ -37,3 +37,4 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true });
 }
+

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,7 @@ async function getAuthedUserId(req: Request) {
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) return null;
 
-  const { data, error } = await supabaseServer.auth.getUser(token);
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data?.user?.id) return null;
   return data.user.id;
 }
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     const paymentMethod = String(body.payment_method || "SPARK").toUpperCase(); // "SPARK" | "COD"
 
     if (paymentMethod === "COD") {
-      const { data, error } = await supabaseServer.rpc("create_order_atomic_cod", {
+      const { data, error } = await supabaseAdmin.rpc("create_order_atomic_cod", {
         p_user_id: userId,
         p_first_name: first_name,
         p_last_name: last_name,
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     // So we do: create COD-like atomic order but with payment fields set to PENDING.
     // We'll call a second function `create_order_atomic_pending` (SQL below).
 
-    const { data, error } = await supabaseServer.rpc("create_order_atomic_pending", {
+    const { data, error } = await supabaseAdmin.rpc("create_order_atomic_pending", {
       p_user_id: userId,
       p_first_name: first_name,
       p_last_name: last_name,

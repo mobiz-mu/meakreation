@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 const ALLOWED = new Set([
@@ -15,14 +15,14 @@ const ALLOWED = new Set([
 
 export async function POST(req: Request) {
   try {
-    const admin = await requireAdmin(req);
-    if (!admin.ok) return NextResponse.json({ error: admin.error }, { status: 401 });
+    const admin = await requireAdmin();
+    if (!admin.ok) { return NextResponse.json({ error: admin.error }, { status: admin.status }); }
 
     const { order_id, status } = await req.json();
     if (!order_id || !status) return NextResponse.json({ error: "Missing order_id/status" }, { status: 400 });
     if (!ALLOWED.has(String(status))) return NextResponse.json({ error: "Invalid status" }, { status: 400 });
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabaseAdmin
       .from("orders")
       .update({ status })
       .eq("id", order_id)
@@ -37,3 +37,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 });
   }
 }
+

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 
 export const runtime = "nodejs";
 
@@ -8,7 +8,7 @@ export async function POST(req: Request) {
     const { token } = await req.json();
     if (!token) return NextResponse.json({ error: "Missing token" }, { status: 400 });
 
-    const { data: order, error } = await supabaseServer
+    const { data: order, error } = await supabaseAdmin
       .from("orders")
       .select("order_no,status,payment_status,total_mur,paid_at,created_at")
       .eq("public_token", token)

@@ -1,12 +1,12 @@
 // src/app/api/admin/categories/toggle-active/route.ts
 import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server-admin";
 import { requireAdmin } from "@/lib/admin/requireAdmin";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
-  const guard = await requireAdmin(req);
+  const guard = await requireAdmin();
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   const body = await req.json().catch(() => ({}));
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
   if (typeof is_active !== "boolean") return NextResponse.json({ error: "Missing is_active boolean" }, { status: 400 });
 
-  const { data, error } = await supabaseServer
+  const { data, error } = await supabaseAdmin
     .from("categories")
     .update({ is_active, updated_at: new Date().toISOString() })
     .eq("id", id)
@@ -26,3 +26,4 @@ export async function POST(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, item: data });
 }
+
