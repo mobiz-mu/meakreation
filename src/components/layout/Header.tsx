@@ -101,24 +101,24 @@ export default function Header() {
   useEffect(() => {
     let mounted = true;
 
-    async function syncUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    async function loadUser() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      if (!mounted) return;
-      setUser(user ?? null);
+        if (!mounted) return;
+        setUser(user ?? null);
+      } catch {
+        if (!mounted) return;
+        setUser(null);
+      }
     }
 
-    syncUser();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(async () => {
-      await syncUser();
-    });
+    loadUser();
 
     return () => {
       mounted = false;
-      listener.subscription.unsubscribe();
     };
   }, []);
 
@@ -426,8 +426,9 @@ export default function Header() {
                           <button
                             type="button"
                             onClick={async () => {
-                              await supabase.auth.signOut();
+                              await supabase.auth.signOut({ scope: "local" });
                               closeAll();
+                              window.location.href = "/";
                             }}
                             className="block w-full px-4 py-3 text-left text-sm text-[#4b2e26] hover:bg-black/[0.04]"
                           >
@@ -670,8 +671,9 @@ export default function Header() {
                     type="button"
                     className="rounded-2xl bg-[#8f4f63] px-4 py-3 text-center text-white transition hover:opacity-90"
                     onClick={async () => {
-                      await supabase.auth.signOut();
+                      await supabase.auth.signOut({ scope: "local" });
                       closeAll();
+                      window.location.href = "/";
                     }}
                   >
                     Logout

@@ -287,6 +287,26 @@ export async function getNewArrivalProducts(limit = 24) {
     .map(toCardProduct);
 }
 
+
+export async function getProductsByCategorySlug(slug: string, limit = 36) {
+  const category = await getCategoryBySlug(slug);
+
+  if (!category) {
+    return {
+      category: null,
+      items: [],
+    };
+  }
+
+  const items = await getProductsByCategoryId(category.id, limit);
+
+  return {
+    category,
+    items,
+  };
+}
+
+
 export async function getShopProducts(filters?: {
   category?: string;
   q?: string;

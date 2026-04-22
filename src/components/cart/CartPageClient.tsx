@@ -6,23 +6,62 @@ import { useMemo } from "react";
 import { mur } from "@/lib/money";
 import { useCart } from "@/store/cart";
 
-function cx(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
+type AnyCartItem = {
+  productId?: string;
+  product_id?: string;
+  variantId?: string | null;
+  variant_id?: string | null;
+  title?: string;
+  name?: string;
+  unitPriceMur?: number;
+  price?: number;
+  imageUrl?: string | null;
+  image?: string | null;
+  qty?: number;
+  variantLabel?: string | null;
+  slug?: string;
+};
+
+function getProductId(item: AnyCartItem) {
+  return item.productId ?? item.product_id ?? "";
+}
+
+function getVariantId(item: AnyCartItem) {
+  return item.variantId ?? item.variant_id ?? null;
+}
+
+function getTitle(item: AnyCartItem) {
+  return item.title ?? item.name ?? "Product";
+}
+
+function getUnitPrice(item: AnyCartItem) {
+  const value = item.unitPriceMur ?? item.price ?? 0;
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function getImage(item: AnyCartItem) {
+  return item.imageUrl ?? item.image ?? null;
+}
+
+function getQty(item: AnyCartItem) {
+  const value = item.qty ?? 1;
+  return Math.max(1, Number(value) || 1);
 }
 
 export default function CartPageClient() {
-  const items = useCart((s) => s.items);
+  const items = useCart((s) => s.items) as AnyCartItem[];
   const removeItem = useCart((s) => s.removeItem);
   const setQty = useCart((s) => s.setQty);
   const clear = useCart((s) => s.clear);
 
   const subtotal = useMemo(
-    () => items.reduce((sum, item) => sum + item.unitPriceMur * item.qty, 0),
+    () =>
+      items.reduce((sum, item) => sum + getUnitPrice(item) * getQty(item), 0),
     [items]
   );
 
   const totalItems = useMemo(
-    () => items.reduce((sum, item) => sum + item.qty, 0),
+    () => items.reduce((sum, item) => sum + getQty(item), 0),
     [items]
   );
 
@@ -84,92 +123,100 @@ export default function CartPageClient() {
         </div>
 
         <div className="mt-8 space-y-4">
-          {items.map((item) => (
-            <article
-              key={`${item.productId}-${item.variantId}`}
-              className="flex gap-4 rounded-[24px] border border-neutral-100 bg-white p-4 transition hover:shadow-sm"
-            >
-              <div className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[18px] bg-neutral-100 sm:h-32 sm:w-28">
-                {item.imageUrl ? (
-                  <Image
-                    src={item.imageUrl}
-                    alt={item.title}
-                    fill
-                    className="object-cover"
-                    sizes="112px"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-xs text-neutral-500">
-                    No image
-                  </div>
-                )}
-              </div>
+          {items.map((item) => {
+            const productId = getProductId(item);
+            const variantId = getVariantId(item);
+            const title = getTitle(item);
+            const image = getImage(item);
+            const unitPrice = getUnitPrice(item);
+            const qty = getQty(item);
 
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <h2 className="line-clamp-2 text-base font-semibold tracking-tight text-neutral-900">
-                      {item.title}
-                    </h2>
-
-                    {item.variantLabel ? (
-                      <p className="mt-1 text-sm text-neutral-500">
-                        {item.variantLabel}
-                      </p>
-                    ) : null}
-                  </div>
-
-                  <div className="text-base font-semibold text-neutral-900">
-                    {mur(item.unitPriceMur * item.qty)}
-                  </div>
+            return (
+              <article
+                key={`${productId}-${variantId ?? "default"}`}
+                className="flex gap-4 rounded-[24px] border border-neutral-100 bg-white p-4 transition hover:shadow-sm"
+              >
+                <div className="relative h-28 w-24 shrink-0 overflow-hidden rounded-[18px] bg-neutral-100 sm:h-32 sm:w-28">
+                  {image ? (
+                    <Image
+                      src={image}
+                      alt={title}
+                      fill
+                      className="object-cover"
+                      sizes="112px"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-neutral-500">
+                      No image
+                    </div>
+                  )}
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm text-neutral-600">
-                    Unit price: <span className="font-medium text-neutral-900">{mur(item.unitPriceMur)}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <h2 className="line-clamp-2 text-base font-semibold tracking-tight text-neutral-900">
+                        {title}
+                      </h2>
+
+                      {item.variantLabel ? (
+                        <p className="mt-1 text-sm text-neutral-500">
+                          {item.variantLabel}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <div className="text-base font-semibold text-neutral-900">
+                      {mur(unitPrice * qty)}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQty(item.productId, item.variantId, item.qty - 1)
-                        }
-                        className="px-4 py-2 text-neutral-800 transition hover:bg-neutral-50"
-                        aria-label="Decrease quantity"
-                      >
-                        -
-                      </button>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm text-neutral-600">
+                      Unit price:{" "}
+                      <span className="font-medium text-neutral-900">
+                        {mur(unitPrice)}
+                      </span>
+                    </div>
 
-                      <div className="min-w-[42px] text-center text-sm font-semibold text-neutral-900">
-                        {item.qty}
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center overflow-hidden rounded-full border border-neutral-200 bg-white">
+                        <button
+                          type="button"
+                          onClick={() => setQty(productId, variantId, qty - 1)}
+                          className="px-4 py-2 text-neutral-800 transition hover:bg-neutral-50"
+                          aria-label="Decrease quantity"
+                        >
+                          -
+                        </button>
+
+                        <div className="min-w-[42px] text-center text-sm font-semibold text-neutral-900">
+                          {qty}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setQty(productId, variantId, qty + 1)}
+                          className="px-4 py-2 text-neutral-800 transition hover:bg-neutral-50"
+                          aria-label="Increase quantity"
+                        >
+                          +
+                        </button>
                       </div>
 
                       <button
                         type="button"
-                        onClick={() =>
-                          setQty(item.productId, item.variantId, item.qty + 1)
-                        }
-                        className="px-4 py-2 text-neutral-800 transition hover:bg-neutral-50"
-                        aria-label="Increase quantity"
+                        onClick={() => removeItem(productId, variantId)}
+                        className="text-sm font-medium text-rose-600 transition hover:text-rose-700"
                       >
-                        +
+                        Remove
                       </button>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => removeItem(item.productId, item.variantId)}
-                      className="text-sm font-medium text-rose-600 transition hover:text-rose-700"
-                    >
-                      Remove
-                    </button>
                   </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
 
         <div className="mt-8 flex flex-wrap gap-3">
@@ -215,7 +262,9 @@ export default function CartPageClient() {
         </div>
 
         <div className="mt-6 flex items-center justify-between">
-          <span className="text-base font-semibold text-neutral-900">Estimated Total</span>
+          <span className="text-base font-semibold text-neutral-900">
+            Estimated Total
+          </span>
           <span className="text-xl font-semibold tracking-tight text-neutral-900">
             {mur(subtotal)}
           </span>
@@ -238,8 +287,8 @@ export default function CartPageClient() {
         </div>
 
         <div className="mt-6 rounded-[20px] border border-[#eadfd8] bg-[#fbf7f4] px-4 py-4 text-sm leading-6 text-[#6f5a52]">
-          Handmade with care in Mauritius. Final shipping cost will be applied at checkout
-          based on your selected delivery method.
+          Handmade with care in Mauritius. Final shipping cost will be applied at
+          checkout based on your selected delivery method.
         </div>
       </aside>
     </div>

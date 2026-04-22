@@ -17,7 +17,6 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Customer fields (guest or logged-in)
     const first_name = body.first_name;
     const last_name = body.last_name;
     const email = body.email;
@@ -34,20 +33,27 @@ export async function POST(req: Request) {
     const shipping_method_id = body.shipping_method_id;
     const discount_mur = Number(body.discount_mur ?? 0);
     const notes = body.notes ?? null;
+    const payment_reference = body.payment_reference ?? null;
 
-    // IMPORTANT: items must include variant_id (your checkout requires it)
     const items = Array.isArray(body.items) ? body.items : [];
-    if (!items.length) return NextResponse.json({ error: "Empty cart" }, { status: 400 });
+    if (!items.length) {
+      return NextResponse.json({ error: "Empty cart" }, { status: 400 });
+    }
 
-    // user (optional)
     const userId = await getAuthedUserId(req);
 
-    // Call your atomic function (it deducts stock + computes totals)
-    // We create as COD only when selected; otherwise create with PENDING payment
-    const paymentMethod = String(body.payment_method || "SPARK").toUpperCase(); // "SPARK" | "COD"
+    const paymentMethod = String(body.payment_method || "SPARK").toUpperCase();
 
-    if (paymentMethod === "COD") {
-      const { data, error } = await supabaseAdmin.rpc("create_order_atomic_cod", {
+    if (!["SPARK", "JUICE", "BANK_TRANSFER"].includes(paymentMethod)) {
+      return NextResponse.json(
+        { error: "Invalid payment method" },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabaseAdmin.rpc(
+      "create_order_atomic_pending",
+      {
         p_user_id: userId,
         p_first_name: first_name,
         p_last_name: last_name,
@@ -64,58 +70,42 @@ export async function POST(req: Request) {
         p_notes: notes,
         p_discount_mur: discount_mur,
         p_items: items,
-      });
-
-      if (error) throw error;
-
-      // data already contains order_id + public_token
-      return NextResponse.json({
-        ok: true,
-        orderId: data.order_id,
-        publicToken: data.public_token,
-        orderNo: data.order_no,
-        payment_method: "COD",
-      });
-    }
-
-    // SPARK / online payment flow:
-    // We’ll reuse the same atomic approach but set payment_status = PENDING + method SPARK.
-    // If you don't have a function for this yet, we do it with a safe insert+deduct in SQL next.
-    // ✅ QUICK SAFE WAY: create COD order then immediately flip to PENDING SPARK is WRONG.
-    // So we do: create COD-like atomic order but with payment fields set to PENDING.
-    // We'll call a second function `create_order_atomic_pending` (SQL below).
-
-    const { data, error } = await supabaseAdmin.rpc("create_order_atomic_pending", {
-      p_user_id: userId,
-      p_first_name: first_name,
-      p_last_name: last_name,
-      p_email: email,
-      p_phone: phone,
-      p_whatsapp: whatsapp,
-      p_address_line1: address_line1,
-      p_address_line2: address_line2,
-      p_city: city,
-      p_district: district,
-      p_postal_code: postal_code,
-      p_country: country,
-      p_shipping_method_id: shipping_method_id,
-      p_notes: notes,
-      p_discount_mur: discount_mur,
-      p_items: items,
-      p_payment_method: "SPARK",
-    });
+        p_payment_method: paymentMethod,
+      }
+    );
 
     if (error) throw error;
+    if (!data?.order_id) {
+      throw new Error("Order creation did not return an order id.");
+    }
+
+    const { error: updErr } = await supabaseAdmin
+      .from("orders")
+      .update({
+        payment_method: paymentMethod,
+        payment_status:
+          paymentMethod === "SPARK" ? "PENDING" : "AWAITING_CONFIRMATION",
+        notes: payment_reference
+          ? `${notes ? `${notes}\n\n` : ""}Payment reference: ${payment_reference}`
+          : notes,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", data.order_id);
+
+    if (updErr) throw updErr;
 
     return NextResponse.json({
       ok: true,
       orderId: data.order_id,
       publicToken: data.public_token,
       orderNo: data.order_no,
-      payment_method: "SPARK",
+      payment_method: paymentMethod,
     });
   } catch (err: any) {
     console.error("orders/create error:", err);
-    return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || "Failed" },
+      { status: 500 }
+    );
   }
 }

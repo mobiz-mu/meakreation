@@ -21,6 +21,7 @@ export async function POST(req: Request) {
       slug: String(body.slug || "").trim(),
       sku: body.sku ?? null,
       barcode: body.barcode ?? null,
+      category_id: body.category_id || null,
       base_price_mur: Number(body.base_price_mur ?? 0),
       compare_at_price_mur:
         body.compare_at_price_mur === "" || body.compare_at_price_mur == null
@@ -47,7 +48,9 @@ export async function POST(req: Request) {
     const { data: product, error } = await supabaseAdmin
       .from("products")
       .insert(payload)
-      .select("id,title,slug,is_active,is_featured,is_best_seller,created_at")
+      .select(
+        "id,title,slug,category_id,is_active,is_featured,is_best_seller,created_at"
+      )
       .single();
 
     if (error) throw error;
@@ -55,7 +58,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ product });
   } catch (e: any) {
     console.error("products/create error:", e);
-    return NextResponse.json({ error: e?.message || "Failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: e?.message || "Failed" },
+      { status: 500 }
+    );
   }
 }
-

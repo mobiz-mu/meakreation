@@ -12,8 +12,19 @@ function mustEnv(name: string) {
 
 function safeSiteUrl() {
   const base = mustEnv("NEXT_PUBLIC_SITE_URL");
-  // Remove trailing slash
   return base.endsWith("/") ? base.slice(0, -1) : base;
+}
+
+function getSparkEndpoint() {
+  const raw = mustEnv("SPARK_BASE_URL").trim();
+
+  // If user already stored full endpoint, use it directly
+  if (raw.includes("orderData.faces") || raw.includes("?")) {
+    return raw;
+  }
+
+  // Otherwise assume base URL and append /checkout
+  return raw.endsWith("/") ? `${raw}checkout` : `${raw}/checkout`;
 }
 
 async function getAuthedUserId(req: Request) {
@@ -26,18 +37,29 @@ async function getAuthedUserId(req: Request) {
   return data.user.id;
 }
 
+async function parseResponseSafe(resp: Response) {
+  const text = await resp.text();
+
+  if (!text) {
+    return { rawText: "", data: null };
+  }
+
+  try {
+    return { rawText: text, data: JSON.parse(text) };
+  } catch {
+    return { rawText: text, data: null };
+  }
+}
+
 export async function POST(req: Request) {
   try {
-    const SPARK_BASE_URL = mustEnv("SPARK_BASE_URL");
+    const SPARK_ENDPOINT = getSparkEndpoint();
     const SPARK_STORE_ID = mustEnv("SPARK_STORE_ID");
     const SPARK_API_KEY = mustEnv("SPARK_API_KEY");
     const SITE = safeSiteUrl();
 
     const body = await req.json();
 
-    // You can pay by:
-    // - logged-in ownership: order.user_id === auth.uid()
-    // - guest: provide public_token (uuid) that matches order.public_token
     const orderId: string = body?.orderId;
     const publicToken: string | null = body?.publicToken ?? null;
 
@@ -47,7 +69,6 @@ export async function POST(req: Request) {
 
     const authedUserId = await getAuthedUserId(req);
 
-    // Fetch only what we need
     const { data: order, error: oErr } = await supabaseAdmin
       .from("orders")
       .select("id,order_no,user_id,total_mur,public_token,payment_status,status")
@@ -55,26 +76,32 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (oErr) throw oErr;
-    if (!order?.id) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    if (!order?.id) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
 
-    // Ownership / access check
-    const isOwner = authedUserId && order.user_id && authedUserId === order.user_id;
-    const isGuestAllowed = !order.user_id && publicToken && publicToken === order.public_token;
+    const isOwner =
+      authedUserId && order.user_id && authedUserId === order.user_id;
+    const isGuestAllowed =
+      !order.user_id && publicToken && publicToken === order.public_token;
 
     if (!isOwner && !isGuestAllowed) {
       return NextResponse.json({ error: "Not allowed" }, { status: 403 });
     }
 
-    // Prevent creating new checkout if already paid
     if (order.payment_status === "PAID" || order.status === "PAID") {
       return NextResponse.json({ error: "Order already paid" }, { status: 409 });
     }
 
-    // Strong unique merchant tx id
     const merchantTransactionId = `MK-${crypto.randomUUID()}`;
 
-    const successUrl = `${SITE}/order-success?t=${encodeURIComponent(order.public_token)}`;
-    const cancelUrl = `${SITE}/order-failed?t=${encodeURIComponent(order.public_token)}`;
+    // Match your current storefront routes
+    const successUrl = `${SITE}/checkout/success?t=${encodeURIComponent(
+      order.public_token
+    )}`;
+    const cancelUrl = `${SITE}/checkout/success?t=${encodeURIComponent(
+      order.public_token
+    )}`;
     const webhookUrl = `${SITE}/api/spark/webhook`;
 
     const payload = {
@@ -83,12 +110,11 @@ export async function POST(req: Request) {
       amount: Number(order.total_mur),
       currency: "MUR",
       returnUrl: successUrl,
-      cancelUrl: cancelUrl,
+      cancelUrl,
       webhookUrl,
     };
 
-    // Call Spark
-    const resp = await fetch(`${SPARK_BASE_URL}/checkout`, {
+    const resp = await fetch(SPARK_ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -97,31 +123,49 @@ export async function POST(req: Request) {
       body: JSON.stringify(payload),
     });
 
-    const sparkData = await resp.json().catch(() => ({}));
+    const parsed = await parseResponseSafe(resp);
+    const sparkData = parsed.data;
+    const rawText = parsed.rawText;
 
     if (!resp.ok) {
-      // Log response for debugging, but don't leak provider secrets
       await supabaseAdmin.from("payment_events").insert({
         provider: "SPARK",
         merchant_transaction_id: merchantTransactionId,
         event_type: "CREATE_CHECKOUT",
         event_status: "ERROR",
-        payload: { request: payload, response: sparkData, http: resp.status },
+        payload: {
+          request: payload,
+          response: sparkData ?? rawText,
+          http: resp.status,
+        },
       });
 
       return NextResponse.json(
-        { error: "Spark checkout failed", details: sparkData?.message || sparkData?.error || resp.statusText },
+        {
+          error: "Spark checkout failed",
+          details:
+            sparkData?.message ||
+            sparkData?.error ||
+            rawText ||
+            resp.statusText,
+        },
         { status: 502 }
       );
     }
 
-    const checkoutUrl = sparkData?.checkoutUrl || sparkData?.checkout_url || sparkData?.url;
+    const checkoutUrl =
+      sparkData?.checkoutUrl || sparkData?.checkout_url || sparkData?.url;
+
     if (!checkoutUrl) {
-      return NextResponse.json({ error: "Missing checkoutUrl from Spark" }, { status: 502 });
+      return NextResponse.json(
+        {
+          error: "Missing checkoutUrl from Spark",
+          details: rawText || "Spark did not return a checkout URL.",
+        },
+        { status: 502 }
+      );
     }
 
-    // Persist session (idempotent per order/provider)
-    // With unique index (order_id, provider), repeated calls overwrite the session row.
     const { error: psErr } = await supabaseAdmin
       .from("payment_sessions")
       .upsert(
@@ -135,7 +179,7 @@ export async function POST(req: Request) {
           checkout_url: checkoutUrl,
           status: "PENDING",
           raw_request: payload,
-          raw_response: sparkData,
+          raw_response: sparkData ?? rawText,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "order_id,provider" }
@@ -143,7 +187,6 @@ export async function POST(req: Request) {
 
     if (psErr) throw psErr;
 
-    // Mark order pending payment (keep fulfillment separate)
     const { error: updErr } = await supabaseAdmin
       .from("orders")
       .update({
@@ -156,13 +199,12 @@ export async function POST(req: Request) {
 
     if (updErr) throw updErr;
 
-    // Record create event
     await supabaseAdmin.from("payment_events").insert({
       provider: "SPARK",
       merchant_transaction_id: merchantTransactionId,
       event_type: "CREATE_CHECKOUT",
       event_status: "PENDING",
-      payload: { request: payload, response: sparkData },
+      payload: { request: payload, response: sparkData ?? rawText },
     });
 
     return NextResponse.json({
@@ -172,6 +214,9 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     console.error("spark/create-checkout error:", error);
-    return NextResponse.json({ error: error?.message || "Failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: error?.message || "Failed" },
+      { status: 500 }
+    );
   }
 }

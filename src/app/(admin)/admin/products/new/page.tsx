@@ -58,6 +58,14 @@ type PendingFile = {
   note?: string;
 };
 
+type CategoryOption = {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  sort_order: number;
+};
+
 export default function AdminProductNewPage() {
   const router = useRouter();
 
@@ -74,6 +82,8 @@ export default function AdminProductNewPage() {
   const [basePrice, setBasePrice] = useState<number>(0);
   const [compareAt, setCompareAt] = useState<number>(0);
 
+  const [categoryId, setCategoryId] = useState<string>("");
+
   const [isActive, setIsActive] = useState(true);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isBestSeller, setIsBestSeller] = useState(false);
@@ -88,8 +98,10 @@ export default function AdminProductNewPage() {
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [images, setImages] = useState<UploadedRow[]>([]);
   const [pending, setPending] = useState<PendingFile[]>([]);
-  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
 
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const [slugTouched, setSlugTouched] = useState(false);
 
   useEffect(() => {
@@ -103,6 +115,29 @@ export default function AdminProductNewPage() {
       }
     };
   }, [pending]);
+
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  async function loadCategories() {
+    setCategoriesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id,name,slug,is_active,sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      setCategories((data ?? []) as CategoryOption[]);
+    } catch (e: any) {
+      console.error("loadCategories error:", e);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  }
 
   const flags = useMemo(() => {
     const list: Array<{ label: string; kind: "ok" | "pink" | "black" }> = [];
@@ -168,6 +203,7 @@ export default function AdminProductNewPage() {
           base_price_mur: Number(basePrice) || 0,
           compare_at_price_mur:
             Number(compareAt) > 0 ? Number(compareAt) : null,
+          category_id: categoryId || null,
           is_active: Boolean(isActive),
           is_featured: Boolean(isFeatured),
           is_best_seller: Boolean(isBestSeller),
@@ -283,7 +319,7 @@ export default function AdminProductNewPage() {
           </h1>
 
           <p className="mt-1 text-sm text-black/60">
-            Add details, SEO, then upload images.
+            Add details, assign a category, then upload images.
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2">
@@ -381,6 +417,27 @@ export default function AdminProductNewPage() {
                 />
                 <div className="text-xs text-black/45">
                   URL: /shop/{slugify(slug || title)}
+                </div>
+              </div>
+
+              <div className="space-y-1 md:col-span-2">
+                <Label className="text-black">Category</Label>
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm text-black outline-none"
+                >
+                  <option value="">
+                    {categoriesLoading ? "Loading categories..." : "No category selected"}
+                  </option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="text-xs text-black/45">
+                  Assigning a category makes this product appear automatically on that frontend category page.
                 </div>
               </div>
 

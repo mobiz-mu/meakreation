@@ -3,13 +3,29 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Plus, RefreshCw, GripVertical, Save, Power, Pencil } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  RefreshCw,
+  GripVertical,
+  Save,
+  Power,
+  Pencil,
+  FolderKanban,
+  Boxes,
+} from "lucide-react";
 
 type Category = {
   id: string;
@@ -21,6 +37,10 @@ type Category = {
   sort_order: number;
   created_at?: string;
   updated_at?: string;
+};
+
+type ProductCountRow = {
+  category_id: string | null;
 };
 
 async function getToken() {
@@ -46,7 +66,6 @@ export default function AdminCategoriesPage() {
   const [saving, setSaving] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [dirtyOrder, setDirtyOrder] = useState(false);
-
   const [err, setErr] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -54,6 +73,7 @@ export default function AdminCategoriesPage() {
 
   const [items, setItems] = useState<Category[]>([]);
   const [count, setCount] = useState(0);
+  const [productCounts, setProductCounts] = useState<Record<string, number>>({});
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
@@ -65,10 +85,23 @@ export default function AdminCategoriesPage() {
   const [sortOrder, setSortOrder] = useState<number>(0);
   const [isActive, setIsActive] = useState(true);
 
-  // drag state
   const [dragId, setDragId] = useState<string | null>(null);
 
-  const title = useMemo(() => (editing ? "Edit category" : "New category"), [editing]);
+  const title = useMemo(
+    () => (editing ? "Edit category" : "New category"),
+    [editing]
+  );
+
+  const stats = useMemo(() => {
+    const total = items.length;
+    const active = items.filter((x) => x.is_active).length;
+    const inactive = items.filter((x) => !x.is_active).length;
+    const assignedProducts = Object.values(productCounts).reduce(
+      (sum, n) => sum + n,
+      0
+    );
+    return { total, active, inactive, assignedProducts };
+  }, [items, productCounts]);
 
   function resetForm() {
     setEditing(null);
@@ -96,10 +129,33 @@ export default function AdminCategoriesPage() {
     setOpen(true);
   }
 
+  async function loadProductCounts() {
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .select("category_id")
+        .eq("is_active", true);
+
+      if (error) throw error;
+
+      const counts: Record<string, number> = {};
+      ((data ?? []) as ProductCountRow[]).forEach((row) => {
+        if (!row.category_id) return;
+        counts[row.category_id] = (counts[row.category_id] ?? 0) + 1;
+      });
+
+      setProductCounts(counts);
+    } catch (e) {
+      console.error("loadProductCounts error:", e);
+      setProductCounts({});
+    }
+  }
+
   async function load() {
     setErr(null);
     setLoading(true);
     setDirtyOrder(false);
+
     try {
       const token = await getToken();
       const url = new URL(`${window.location.origin}/api/admin/categories/list`);
@@ -110,6 +166,7 @@ export default function AdminCategoriesPage() {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
       });
+
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed to load categories");
 
@@ -118,11 +175,16 @@ export default function AdminCategoriesPage() {
         sort_order: Number(x.sort_order ?? 0),
       }));
 
-      // Ensure sorted by sort_order then created_at
-      list.sort((a, b) => (a.sort_order - b.sort_order) || String(b.created_at || "").localeCompare(String(a.created_at || "")));
+      list.sort(
+        (a, b) =>
+          a.sort_order - b.sort_order ||
+          String(b.created_at || "").localeCompare(String(a.created_at || ""))
+      );
 
       setItems(list);
       setCount(json.count ?? list.length);
+
+      await loadProductCounts();
     } catch (e: any) {
       setErr(e?.message || "Failed");
     } finally {
@@ -133,6 +195,7 @@ export default function AdminCategoriesPage() {
   async function saveCategory() {
     setErr(null);
     setSaving(true);
+
     try {
       const token = await getToken();
 
@@ -148,7 +211,10 @@ export default function AdminCategoriesPage() {
 
       const res = await fetch("/api/admin/categories/upsert", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
 
@@ -171,13 +237,21 @@ export default function AdminCategoriesPage() {
       const token = await getToken();
       const res = await fetch("/api/admin/categories/toggle-active", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ id: c.id, is_active: !c.is_active }),
       });
+
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Toggle failed");
 
-      setItems((prev) => prev.map((x) => (x.id === c.id ? { ...x, is_active: !c.is_active } : x)));
+      setItems((prev) =>
+        prev.map((x) =>
+          x.id === c.id ? { ...x, is_active: !c.is_active } : x
+        )
+      );
     } catch (e: any) {
       setErr(e?.message || "Toggle failed");
     }
@@ -195,8 +269,10 @@ export default function AdminCategoriesPage() {
       const [picked] = a.splice(from, 1);
       a.splice(to, 0, picked);
 
-      // Recompute sort_order as 10,20,30...
-      const withOrder = a.map((x, idx) => ({ ...x, sort_order: (idx + 1) * 10 }));
+      const withOrder = a.map((x, idx) => ({
+        ...x,
+        sort_order: (idx + 1) * 10,
+      }));
       setDirtyOrder(true);
       return withOrder;
     });
@@ -205,15 +281,23 @@ export default function AdminCategoriesPage() {
   async function persistOrder() {
     setErr(null);
     setReordering(true);
+
     try {
       const token = await getToken();
+
       const payload = {
-        items: items.map((x) => ({ id: x.id, sort_order: Number(x.sort_order || 0) })),
+        items: items.map((x) => ({
+          id: x.id,
+          sort_order: Number(x.sort_order || 0),
+        })),
       };
 
       const res = await fetch("/api/admin/categories/reorder", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
 
@@ -233,7 +317,6 @@ export default function AdminCategoriesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reload on filter change (debounced)
   useEffect(() => {
     const t = setTimeout(() => load(), 250);
     return () => clearTimeout(t);
@@ -242,63 +325,128 @@ export default function AdminCategoriesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Categories</h1>
-          <p className="text-sm text-muted-foreground">
-            Drag to reorder. Click a row to open detail.
+          <div className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-1.5 text-[12px] text-black/60 shadow-[0_10px_30px_-25px_rgba(0,0,0,0.25)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#ff6fa0]" />
+            Categories
+          </div>
+
+          <h1 className="mt-3 text-2xl font-semibold tracking-tight text-black sm:text-3xl">
+            Manage Categories
+          </h1>
+
+          <p className="mt-1 text-sm text-black/60">
+            Create categories, reorder them, and assign products so they appear
+            automatically on the storefront.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name or slug…"
-            className="w-[240px] rounded-xl"
-          />
-
-          <div className="flex items-center gap-2">
-            <Button variant={status === "all" ? "default" : "outline"} className="rounded-xl" onClick={() => setStatus("all")}>
-              All
-            </Button>
-            <Button
-              variant={status === "active" ? "default" : "outline"}
-              className="rounded-xl"
-              onClick={() => setStatus("active")}
-            >
-              Active
-            </Button>
-            <Button
-              variant={status === "inactive" ? "default" : "outline"}
-              className="rounded-xl"
-              onClick={() => setStatus("inactive")}
-            >
-              Inactive
-            </Button>
-          </div>
-
-          <Button variant="outline" className="rounded-xl" onClick={load} disabled={loading}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          </Button>
-
-          <Button className="rounded-xl" onClick={openCreate}>
-            <Plus className="h-4 w-4 mr-2" />
-            New
+          <Button variant="outline" className="rounded-2xl" onClick={load}>
+            {loading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Refresh
           </Button>
 
           <Button
-            className="rounded-xl"
             variant={dirtyOrder ? "default" : "outline"}
+            className="rounded-2xl"
             onClick={persistOrder}
             disabled={!dirtyOrder || reordering}
-            title="Save ordering"
           >
-            {reordering ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-            Save order
+            {reordering ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            Save Order
+          </Button>
+
+          <Button className="rounded-2xl bg-[#ff6fa0] text-white hover:bg-[#ff4f8c]" onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Category
           </Button>
         </div>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Card className="rounded-[22px] border-black/10 bg-white">
+          <CardContent className="p-4">
+            <div className="text-[12px] text-black/55">Total</div>
+            <div className="mt-1 text-xl font-semibold text-black">
+              {stats.total}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[22px] border-black/10 bg-white">
+          <CardContent className="p-4">
+            <div className="text-[12px] text-black/55">Active</div>
+            <div className="mt-1 text-xl font-semibold text-black">
+              {stats.active}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[22px] border-black/10 bg-white">
+          <CardContent className="p-4">
+            <div className="text-[12px] text-black/55">Inactive</div>
+            <div className="mt-1 text-xl font-semibold text-black">
+              {stats.inactive}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[22px] border-black/10 bg-white">
+          <CardContent className="p-4">
+            <div className="text-[12px] text-black/55">Assigned Products</div>
+            <div className="mt-1 text-xl font-semibold text-black">
+              {stats.assignedProducts}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="rounded-[26px] border-black/10 bg-white">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search category name or slug..."
+              className="h-11 rounded-2xl border-black/10"
+            />
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={status === "all" ? "default" : "outline"}
+                className="rounded-2xl"
+                onClick={() => setStatus("all")}
+              >
+                All
+              </Button>
+              <Button
+                variant={status === "active" ? "default" : "outline"}
+                className="rounded-2xl"
+                onClick={() => setStatus("active")}
+              >
+                Active
+              </Button>
+              <Button
+                variant={status === "inactive" ? "default" : "outline"}
+                className="rounded-2xl"
+                onClick={() => setStatus("inactive")}
+              >
+                Inactive
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {err ? (
         <Card className="rounded-2xl border-red-200">
@@ -306,109 +454,138 @@ export default function AdminCategoriesPage() {
         </Card>
       ) : null}
 
-      <Card className="rounded-2xl">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Categories ({count})</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-auto">
-          <table className="w-full text-sm">
-            <thead className="text-muted-foreground">
-              <tr className="border-b">
-                <th className="py-2 text-left w-[44px]"> </th>
-                <th className="py-2 text-left">Name</th>
-                <th className="py-2 text-left">Slug</th>
-                <th className="py-2 text-right">Order</th>
-                <th className="py-2 text-right">Status</th>
-                <th className="py-2 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-muted-foreground">
-                    <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
-                    Loading…
-                  </td>
-                </tr>
-              ) : items.length ? (
-                items.map((c) => (
-                  <tr
-                    key={c.id}
-                    draggable
-                    onDragStart={() => setDragId(c.id)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => {
-                      if (dragId) moveItem(dragId, c.id);
-                      setDragId(null);
-                    }}
-                    className="border-b last:border-b-0 hover:bg-muted/40 transition"
-                  >
-                    <td className="py-2">
-                      <div className="inline-flex items-center gap-2 text-muted-foreground cursor-grab">
-                        <GripVertical className="h-4 w-4" />
-                      </div>
-                    </td>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {loading ? (
+          <Card className="rounded-[26px] border-black/10 bg-white lg:col-span-2">
+            <CardContent className="py-10 text-center text-black/55">
+              <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+              Loading categories…
+            </CardContent>
+          </Card>
+        ) : items.length ? (
+          items.map((c) => {
+            const assigned = productCounts[c.id] ?? 0;
 
-                    <td className="py-2">
-                      <Link href={`/admin/categories/${c.id}`} className="font-medium hover:underline">
-                        {c.name}
-                      </Link>
-                      {c.description ? (
-                        <div className="text-xs text-muted-foreground line-clamp-1">{c.description}</div>
-                      ) : null}
-                    </td>
+            return (
+              <div
+                key={c.id}
+                draggable
+                onDragStart={() => setDragId(c.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (dragId) moveItem(dragId, c.id);
+                  setDragId(null);
+                }}
+                className="rounded-[26px] border border-black/10 bg-white p-4 shadow-[0_18px_55px_-45px_rgba(0,0,0,0.22)] transition hover:-translate-y-[1px]"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-black/10 bg-[#fff1f6] text-[#ff6fa0]">
+                    <FolderKanban className="h-6 w-6" />
+                  </div>
 
-                    <td className="py-2 font-mono text-xs">{c.slug}</td>
-
-                    <td className="py-2 text-right">{Number(c.sort_order ?? 0)}</td>
-
-                    <td className="py-2 text-right">
-                      {c.is_active ? (
-                        <Badge className="rounded-xl">Active</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="rounded-xl">
-                          Inactive
-                        </Badge>
-                      )}
-                    </td>
-
-                    <td className="py-2 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" className="rounded-xl" asChild>
-                          <Link href={`/admin/categories/${c.id}`}>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Detail
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="cursor-grab text-black/35">
+                            <GripVertical className="h-4 w-4" />
+                          </div>
+                          <Link
+                            href={`/admin/categories/${c.id}`}
+                            className="truncate text-lg font-semibold text-black hover:underline"
+                          >
+                            {c.name}
                           </Link>
-                        </Button>
-                        <Button variant="outline" className="rounded-xl" onClick={() => openEditDialog(c)}>
-                          Quick edit
-                        </Button>
-                        <Button variant="outline" className="rounded-xl" onClick={() => toggleActive(c)}>
-                          <Power className="h-4 w-4 mr-2" />
-                          {c.is_active ? "Disable" : "Enable"}
-                        </Button>
+                        </div>
+
+                        <div className="mt-1 font-mono text-xs text-black/45">
+                          {c.slug}
+                        </div>
+
+                        {c.description ? (
+                          <div className="mt-2 line-clamp-2 text-sm text-black/60">
+                            {c.description}
+                          </div>
+                        ) : null}
                       </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="py-10 text-center text-muted-foreground">
-                    No categories found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
 
-          <div className="mt-4 flex justify-between text-xs text-muted-foreground">
-            <span>Drag rows to reorder, then click “Save order”.</span>
-            <span>Sort order is auto set to 10,20,30…</span>
-          </div>
-        </CardContent>
-      </Card>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {c.is_active ? (
+                          <Badge className="rounded-2xl">Active</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="rounded-2xl">
+                            Inactive
+                          </Badge>
+                        )}
 
-      {/* Create/Edit dialog */}
+                        <Badge variant="outline" className="rounded-2xl">
+                          Order {c.sort_order}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-black/60">
+                      <div className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-black/[0.02] px-3 py-2">
+                        <Boxes className="h-4 w-4" />
+                        <span>
+                          {assigned} product{assigned === 1 ? "" : "s"} assigned
+                        </span>
+                      </div>
+
+                      {c.image_url ? (
+                        <div className="truncate text-xs text-black/45">
+                          Image set
+                        </div>
+                      ) : (
+                        <div className="truncate text-xs text-black/45">
+                          No image
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl"
+                        asChild
+                      >
+                        <Link href={`/admin/categories/${c.id}`}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          Detail
+                        </Link>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl"
+                        onClick={() => openEditDialog(c)}
+                      >
+                        Quick Edit
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="rounded-2xl"
+                        onClick={() => toggleActive(c)}
+                      >
+                        <Power className="mr-2 h-4 w-4" />
+                        {c.is_active ? "Disable" : "Enable"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <Card className="rounded-[26px] border-black/10 bg-white lg:col-span-2">
+            <CardContent className="py-10 text-center text-black/55">
+              No categories found.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
       <Dialog
         open={open}
         onOpenChange={(v) => {
@@ -432,7 +609,7 @@ export default function AdminCategoriesPage() {
                   if (!editing && !slug.trim()) setSlug(slugify(v));
                 }}
                 className="rounded-xl"
-                placeholder="e.g. New Arrivals"
+                placeholder="e.g. Bags"
               />
             </div>
 
@@ -442,7 +619,7 @@ export default function AdminCategoriesPage() {
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
                 className="rounded-xl font-mono"
-                placeholder="e.g. new-arrivals"
+                placeholder="e.g. bags"
               />
             </div>
 
@@ -479,8 +656,12 @@ export default function AdminCategoriesPage() {
 
               <div className="space-y-1">
                 <div className="text-sm font-medium">Active</div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+                <label className="flex items-center gap-2 pt-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                  />
                   Visible in store
                 </label>
               </div>
@@ -488,11 +669,23 @@ export default function AdminCategoriesPage() {
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" className="rounded-xl" onClick={() => setOpen(false)} disabled={saving}>
+            <Button
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+            >
               Cancel
             </Button>
-            <Button className="rounded-xl" onClick={saveCategory} disabled={saving || !name.trim()}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+
+            <Button
+              className="rounded-xl"
+              onClick={saveCategory}
+              disabled={saving || !name.trim()}
+            >
+              {saving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Save
             </Button>
           </DialogFooter>

@@ -10,7 +10,7 @@ const CATEGORIES = [
     name: "Pochette",
     image:
       "/categories/Ultra luxury product photography of a handmade canvas pochette pouch placed perfectly centered, minimal elegant background with soft tropical palm leaf shadows, Mauritian island inspired aesthetic, neutral sand.jpg",
-    href: "/shop?cat=pochette",
+    href: "/categories/pochette",
     eyebrow: "Handmade",
   },
   {
@@ -18,7 +18,7 @@ const CATEGORIES = [
     name: "Trousse",
     image:
       "/categories/Luxury handmade trousse bag centered in the middle, premium canvas fabric texture visible, minimal tropical background with soft palm leaves and warm sunlight, Mauritian island luxury aesthetic, fashion editori.jpg",
-    href: "/shop?cat=trousse",
+    href: "/categories/trousse",
     eyebrow: "Travel",
   },
   {
@@ -26,7 +26,7 @@ const CATEGORIES = [
     name: "Bags",
     image:
       "/categories/Ultra luxury handmade handbag centered in the middle, premium handcrafted fabric bag with elegant structure, tropical island inspired background with soft sand tones and palm leaves, Mauritian lifestyle luxury.jpg",
-    href: "/shop?cat=bags",
+    href: "/categories/bags",
     eyebrow: "Luxury",
   },
   {
@@ -34,7 +34,7 @@ const CATEGORIES = [
     name: "Hair Accessories",
     image:
       "/categories/Luxury hair accessories flat lay centered in the middle, handmade turbans, scrunchies and bows arranged beautifully, minimal pastel background with soft tropical lighting, feminine fashion editorial aesthetic,.jpg",
-    href: "/shop?cat=hair-accessories",
+    href: "/categories/hair-accessories",
     eyebrow: "Beauty",
   },
   {
@@ -42,7 +42,7 @@ const CATEGORIES = [
     name: "Home Decoration",
     image:
       "/categories/Elegant handmade home decoration product centered in the middle, minimal luxury interior background with soft neutral tones, tropical island design inspiration, Mauritian handcrafted decor style, premium lighti.jpg",
-    href: "/shop?cat=home-decoration",
+    href: "/categories/home-decoration",
     eyebrow: "Artisan",
   },
   {
@@ -50,7 +50,7 @@ const CATEGORIES = [
     name: "Leather Craft",
     image:
       "/categories/Luxury handcrafted leather accessory centered in the middle, premium leather wallet or pouch with rich texture, minimal beige luxury background with soft spotlight lighting, elegant artisan craftsmanship aesthe.jpg",
-    href: "/shop?cat=leather-craft",
+    href: "/categories/leather-craft",
     eyebrow: "Crafted",
   },
 ];
@@ -111,15 +111,14 @@ export default function CategoryCarousel() {
             </div>
 
             <Link
-              href="/shop"
+              href="/categories"
               className="hidden rounded-full border border-black/10 bg-white px-5 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-black shadow-sm transition hover:-translate-y-0.5 hover:shadow-md md:inline-flex"
             >
               View All
             </Link>
           </div>
 
-          {/* Desktop row */}
-          <div className="mt-10 hidden md:grid md:grid-cols-3 lg:grid-cols-6 gap-5">
+          <div className="mt-10 hidden gap-5 md:grid md:grid-cols-3 lg:grid-cols-6">
             {items.map((c, idx) => (
               <Link
                 key={c.slug}
@@ -162,7 +161,6 @@ export default function CategoryCarousel() {
             ))}
           </div>
 
-          {/* Mobile carousel */}
           <div className="mt-8 md:hidden">
             <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2">
               {items.map((c, idx) => (
@@ -208,7 +206,7 @@ export default function CategoryCarousel() {
 
             <div className="mt-4 flex items-center justify-center">
               <Link
-                href="/shop"
+                href="/categories"
                 className="rounded-full border border-black/10 bg-white px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-black shadow-sm"
               >
                 View All Categories

@@ -1,39 +1,45 @@
 import type { Metadata } from "next";
 import CheckoutClient from "@/components/checkout/CheckoutClient";
-import { supabaseServer } from "@/lib/supabase/server-public";
 
 export const metadata: Metadata = {
   title: "Checkout | Mea Kréation",
-  description: "Complete your order with Mea Kréation.",
+  description: "Complete your order securely with Mea Kréation.",
 };
 
-export default async function CheckoutPage() {
-  const { data } = await supabaseServer
-    .from("shipping_methods")
-    .select("id,name,price_mur,is_active,sort_order")
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true });
+type ShippingMethod = {
+  id: string;
+  name: string;
+  price_mur: number;
+};
 
-  const shippingMethods = (data ?? []).map((item: any) => ({
-    id: item.id,
-    name: item.name,
-    price_mur: Number(item.price_mur ?? 0),
-  }));
+async function getShippingMethods(): Promise<ShippingMethod[]> {
+  return [
+    {
+      id: "790203ba-147f-47ea-a456-22ef3c2bc4de",
+      name: "Postage (Normal)",
+      price_mur: 75,
+    },
+    {
+      id: "b4c6d5b6-dac2-44ae-960b-cdf0b8991af3",
+      name: "Postage (Express)",
+      price_mur: 100,
+    },
+    {
+      id: "7dc31447-c4cb-4caf-867c-f13855d57664",
+      name: "Home Delivery",
+      price_mur: 150,
+    },
+  ];
+}
+
+export default async function CheckoutPage() {
+  const shippingMethods = await getShippingMethods();
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
-      {shippingMethods.length ? (
+    <main className="min-h-screen bg-[#fffaf7]">
+      <section className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-5">
         <CheckoutClient shippingMethods={shippingMethods} />
-      ) : (
-        <div className="rounded-[24px] border border-dashed border-neutral-300 bg-white p-10 text-center">
-          <h1 className="text-2xl font-semibold text-neutral-900">
-            Shipping methods unavailable
-          </h1>
-          <p className="mt-3 text-neutral-600">
-            Please add at least one active shipping method in Supabase before using checkout.
-          </p>
-        </div>
-      )}
+      </section>
     </main>
   );
 }

@@ -21,6 +21,14 @@ type ImgRow = {
   created_at: string;
 };
 
+type CategoryOption = {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  sort_order: number;
+};
+
 function fmtMUR(n?: number) {
   const x = Number.isFinite(Number(n)) ? Number(n) : 0;
   return `Rs ${x.toLocaleString("en-MU")}`;
@@ -30,7 +38,6 @@ function cx(...c: Array<string | false | null | undefined>) {
   return c.filter(Boolean).join(" ");
 }
 
-/** Premium image guidance (same vibe as create page) */
 const RECOMMENDED = {
   aspect: "4:5",
   width: 1200,
@@ -49,6 +56,8 @@ export default function AdminProductEditPage() {
 
   const [product, setProduct] = useState<any>(null);
   const [images, setImages] = useState<ImgRow[]>([]);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
 
   const [variants, setVariants] = useState<any[]>([]);
   const [vLoading, setVLoading] = useState(false);
@@ -60,6 +69,7 @@ export default function AdminProductEditPage() {
 
   const [basePrice, setBasePrice] = useState<number>(0);
   const [compareAt, setCompareAt] = useState<number>(0);
+  const [categoryId, setCategoryId] = useState<string>("");
 
   const [isActive, setIsActive] = useState<boolean>(true);
   const [isFeatured, setIsFeatured] = useState<boolean>(false);
@@ -84,6 +94,26 @@ export default function AdminProductEditPage() {
     return token;
   }
 
+  async function loadCategories() {
+    setCategoriesLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id,name,slug,is_active,sort_order")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+      setCategories((data ?? []) as CategoryOption[]);
+    } catch (e) {
+      console.error("loadCategories error:", e);
+      setCategories([]);
+    } finally {
+      setCategoriesLoading(false);
+    }
+  }
+
   async function load() {
     if (!id) return;
     setLoading(true);
@@ -106,6 +136,7 @@ export default function AdminProductEditPage() {
       setBarcode(p.barcode ?? "");
       setBasePrice(Number(p.base_price_mur ?? 0));
       setCompareAt(Number(p.compare_at_price_mur ?? 0));
+      setCategoryId(p.category_id ?? "");
       setIsActive(Boolean(p.is_active ?? true));
       setIsFeatured(Boolean(p.is_featured ?? false));
       setIsBestSeller(Boolean(p.is_best_seller ?? false));
@@ -142,8 +173,7 @@ export default function AdminProductEditPage() {
   useEffect(() => {
     if (!id) return;
     (async () => {
-      await load();
-      await loadVariants();
+      await Promise.all([loadCategories(), load(), loadVariants()]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -166,6 +196,7 @@ export default function AdminProductEditPage() {
             barcode: barcode || null,
             base_price_mur: basePrice,
             compare_at_price_mur: compareAt || 0,
+            category_id: categoryId || null,
             is_active: isActive,
             is_featured: isFeatured,
             is_best_seller: isBestSeller,
@@ -222,15 +253,15 @@ export default function AdminProductEditPage() {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-       product_id: id,
-       image_url,
-       alt: title || null,
-       is_primary: makePrimary,
-       storage_bucket: "products",
-       bucket: "products",
-       storage_path: path,
-     }),
-  });
+        product_id: id,
+        image_url,
+        alt: title || null,
+        is_primary: makePrimary,
+        storage_bucket: "products",
+        bucket: "products",
+        storage_path: path,
+      }),
+    });
 
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to add image row");
@@ -246,7 +277,6 @@ export default function AdminProductEditPage() {
       const list = Array.from(files);
       for (let i = 0; i < list.length; i++) {
         const f = list[i];
-        // primary if none exists yet
         const hasPrimary = images.some((x) => !!x.is_primary);
         const makePrimary = !hasPrimary && i === 0;
         await uploadImage(f, makePrimary);
@@ -276,7 +306,6 @@ export default function AdminProductEditPage() {
     setErr(null);
     try {
       const token = await adminToken();
-      // You need this API. If you don't have it yet, add it (SQL below).
       const res = await fetch("/api/admin/products/set-primary-image", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -285,7 +314,6 @@ export default function AdminProductEditPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed");
 
-      // update local state: only one primary
       setImages((prev) => prev.map((x) => ({ ...x, is_primary: x.id === imgId })));
     } catch (e: any) {
       setErr(e?.message || "Failed to set primary");
@@ -299,7 +327,6 @@ export default function AdminProductEditPage() {
     setErr(null);
     try {
       const token = await adminToken();
-      // You need this API. If you don't have it yet, add it.
       const res = await fetch("/api/admin/products/update-image", {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -337,7 +364,6 @@ export default function AdminProductEditPage() {
 
   return (
     <div className="space-y-6">
-      {/* Top row */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-1.5 text-[12px] text-black/60 shadow-[0_10px_30px_-25px_rgba(0,0,0,0.25)]">
@@ -397,14 +423,12 @@ export default function AdminProductEditPage() {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* LEFT: Details */}
         <Card className="rounded-[26px] border-black/10 bg-white lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base text-black">Details</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-6">
-            {/* Core */}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-black">Title</Label>
@@ -416,14 +440,43 @@ export default function AdminProductEditPage() {
                 <Input className="h-11 rounded-2xl border-black/10" value={slug} onChange={(e) => setSlug(e.target.value)} />
               </div>
 
+              <div className="space-y-1 md:col-span-2">
+                <Label className="text-black">Category</Label>
+                <select
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="h-11 w-full rounded-2xl border border-black/10 bg-white px-3 text-sm text-black outline-none"
+                >
+                  <option value="">
+                    {categoriesLoading ? "Loading categories..." : "No category selected"}
+                  </option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="text-xs text-black/45">
+                  This product appears automatically on the assigned frontend category page.
+                </div>
+              </div>
+
               <div className="space-y-1">
                 <Label className="text-black">SKU</Label>
-                <Input className="h-11 rounded-2xl border-black/10" value={sku} onChange={(e) => setSku(e.target.value)} />
+                <Input
+                  className="h-11 rounded-2xl border-black/10"
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                />
               </div>
 
               <div className="space-y-1">
                 <Label className="text-black">Barcode</Label>
-                <Input className="h-11 rounded-2xl border-black/10" value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+                <Input
+                  className="h-11 rounded-2xl border-black/10"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                />
               </div>
 
               <div className="space-y-1">
@@ -458,7 +511,6 @@ export default function AdminProductEditPage() {
               </div>
             </div>
 
-            {/* Flags */}
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-black/10 bg-black/[0.02] p-4 flex items-center gap-3">
                 <Switch checked={isActive} onCheckedChange={setIsActive} />
@@ -485,7 +537,6 @@ export default function AdminProductEditPage() {
               </div>
             </div>
 
-            {/* Descriptions */}
             <div className="space-y-1">
               <Label className="text-black">Short Description</Label>
               <Textarea className="rounded-2xl border-black/10 min-h-[90px]" value={shortDescription} onChange={(e) => setShortDescription(e.target.value)} />
@@ -496,7 +547,6 @@ export default function AdminProductEditPage() {
               <Textarea className="rounded-2xl border-black/10 min-h-[160px]" value={description} onChange={(e) => setDescription(e.target.value)} />
             </div>
 
-            {/* SEO */}
             <div className="rounded-[22px] border border-black/10 bg-white p-4">
               <div className="text-sm font-semibold text-black">SEO</div>
               <div className="text-xs text-black/55 mt-1">Optimized metadata for Google & social previews.</div>
@@ -515,9 +565,7 @@ export default function AdminProductEditPage() {
           </CardContent>
         </Card>
 
-        {/* RIGHT: Images + Variants */}
         <div className="space-y-4">
-          {/* Images */}
           <Card className="rounded-[26px] border-black/10 bg-white">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -595,7 +643,6 @@ export default function AdminProductEditPage() {
             </CardContent>
           </Card>
 
-          {/* Variants (kept, styled) */}
           <Card className="rounded-[26px] border-black/10 bg-white">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base text-black">Variants</CardTitle>
@@ -713,7 +760,6 @@ function ImageRow({
   return (
     <div className="flex items-start gap-3 rounded-2xl border border-black/10 bg-white p-2">
       <div className="h-14 w-14 rounded-xl overflow-hidden bg-black/[0.04] border border-black/10 shrink-0">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={img.image_url} alt={img.alt ?? ""} className="h-full w-full object-cover" loading="lazy" decoding="async" />
       </div>
 
@@ -779,9 +825,6 @@ function ImageRow({
   );
 }
 
-/* =========================
-   Your VariantRow (unchanged)
-========================= */
 function VariantRow({
   value,
   onChange,

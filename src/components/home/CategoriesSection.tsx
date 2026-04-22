@@ -9,42 +9,42 @@ const CATEGORIES = [
     name: "Pochette",
     image:
       "/categories/Ultra luxury product photography of a handmade canvas pochette pouch placed perfectly centered, minimal elegant background with soft tropical palm leaf shadows, Mauritian island inspired aesthetic, neutral sand.jpg",
-    href: "/shop?cat=pochette",
+    href: "/categories/pochette",
     caption: "Elegant handmade pouches",
   },
   {
     name: "Trousse",
     image:
       "/categories/Luxury handmade trousse bag centered in the middle, premium canvas fabric texture visible, minimal tropical background with soft palm leaves and warm sunlight, Mauritian island luxury aesthetic, fashion editori.jpg",
-    href: "/shop?cat=trousse",
+    href: "/categories/trousse",
     caption: "Beauty & travel essentials",
   },
   {
     name: "Bags",
     image:
       "/categories/Ultra luxury handmade handbag centered in the middle, premium handcrafted fabric bag with elegant structure, tropical island inspired background with soft sand tones and palm leaves, Mauritian lifestyle luxury.jpg",
-    href: "/shop?cat=bags",
+    href: "/categories/bags",
     caption: "Stylish Womens everyday bags",
   },
   {
     name: "Hair Accessories",
     image:
       "/categories/Luxury hair accessories flat lay centered in the middle, handmade turbans, scrunchies and bows arranged beautifully, minimal pastel background with soft tropical lighting, feminine fashion editorial aesthetic,.jpg",
-    href: "/shop?cat=hair-accessories",
+    href: "/categories/hair-accessories",
     caption: "Turbans, bows & scrunchies",
   },
   {
     name: "Home Decoration",
     image:
       "/categories/Elegant handmade home decoration product centered in the middle, minimal luxury interior background with soft neutral tones, tropical island design inspiration, Mauritian handcrafted decor style, premium lighti.jpg",
-    href: "/shop?cat=home-decoration",
+    href: "/categories/home-decoration",
     caption: "Warm handmade decor",
   },
   {
     name: "Leather Craft",
     image:
       "/categories/Luxury handcrafted leather accessory centered in the middle, premium leather wallet or pouch with rich texture, minimal beige luxury background with soft spotlight lighting, elegant artisan craftsmanship aesthe.jpg",
-    href: "/shop?cat=leather-craft",
+    href: "/categories/leather-craft",
     caption: "Artisan leather pieces",
   },
 ];
@@ -80,7 +80,6 @@ export default function CategoriesSection() {
 
   return (
     <section className="relative overflow-hidden bg-white py-14 md:py-20">
-      {/* luxury ambient background */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-1/2 top-0 h-40 w-40 -translate-x-1/2 rounded-full bg-[hsl(var(--brand-pink-dark))]/8 blur-3xl" />
         <div className="absolute bottom-0 right-0 h-44 w-44 rounded-full bg-[hsl(var(--brand-pink-light))]/20 blur-3xl" />
@@ -110,8 +109,7 @@ export default function CategoriesSection() {
             </p>
           </div>
 
-          {/* Desktop / tablet premium grid */}
-          <div className="mt-12 hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5 lg:gap-6">
+          <div className="mt-12 hidden gap-5 md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 lg:gap-6">
             {CATEGORIES.map((cat, idx) => (
               <Link
                 key={cat.name}
@@ -140,7 +138,7 @@ export default function CategoriesSection() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-black/0 to-white/0" />
 
                   <div className="absolute inset-x-0 bottom-0 p-4">
-                  <div className="rounded-[22px] border border-white/25 bg-white/55 p-4 backdrop-blur-lg transition-all duration-300 group-hover:bg-white/65">
+                    <div className="rounded-[22px] border border-white/25 bg-white/55 p-4 backdrop-blur-lg transition-all duration-300 group-hover:bg-white/65">
                       <h3 className="text-sm font-semibold tracking-wide text-neutral-900">
                         {cat.name}
                       </h3>
@@ -148,7 +146,7 @@ export default function CategoriesSection() {
                         {cat.caption}
                       </p>
 
-                      <div className="mt-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--brand-pink-dark))] font-semibold">
+                      <div className="mt-3 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--brand-pink-dark))]">
                         Explore Collection
                         <span className="transition-transform duration-300 group-hover:translate-x-1">
                           →
@@ -161,7 +159,6 @@ export default function CategoriesSection() {
             ))}
           </div>
 
-          {/* Mobile premium snap carousel */}
           <div className="mt-10 md:hidden">
             <div className="no-scrollbar -mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2">
               {CATEGORIES.map((cat, idx) => (

@@ -22,16 +22,25 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabaseBrowser.auth.getUser().then(({ data, error }) => {
-      if (!mounted) return;
+    async function loadUser() {
+      try {
+        const { data, error } = await supabaseBrowser.auth.getUser();
 
-      if (error || !data.user) {
+        if (!mounted) return;
+
+        if (error || !data.user) {
+          setEmail(null);
+          return;
+        }
+
+        setEmail(data.user.email ?? null);
+      } catch {
+        if (!mounted) return;
         setEmail(null);
-        return;
       }
+    }
 
-      setEmail(data.user.email ?? null);
-    });
+    loadUser();
 
     return () => {
       mounted = false;

@@ -165,6 +165,137 @@ export async function getProductBySlug(
   return normalizeProduct(data as ProductQueryRow);
 }
 
+export async function getNewArrivalProducts(
+  limit = 8
+): Promise<ProductWithRelations[]> {
+  const { data, error } = await supabaseServer
+    .from("products")
+    .select(`
+      id,
+      title,
+      slug,
+      description,
+      short_description,
+      category_id,
+      base_price_mur,
+      compare_at_price_mur,
+      sku,
+      barcode,
+      is_active,
+      is_featured,
+      is_best_seller,
+      sort_order,
+      seo_title,
+      seo_description,
+      created_at,
+      updated_at,
+      product_images (
+        id,
+        product_id,
+        image_url,
+        alt,
+        sort_order,
+        is_primary,
+        created_at,
+        storage_path,
+        bucket,
+        storage_bucket
+      ),
+      product_variants (
+        id,
+        product_id,
+        options_json,
+        sku,
+        price_mur,
+        compare_at_price_mur,
+        stock_qty,
+        is_active,
+        created_at,
+        updated_at
+      )
+    `)
+    .eq("is_active", true)
+    .neq("is_best_seller", true)
+    .order("is_featured", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("getNewArrivalProducts error:", error);
+    return [];
+  }
+
+  return ((data ?? []) as ProductQueryRow[])
+    .filter((p) => p.is_active === true && p.is_best_seller !== true)
+    .map(normalizeProduct);
+}
+
+export async function getBestSellerProductsForHome(
+  limit = 10
+): Promise<ProductWithRelations[]> {
+  const { data, error } = await supabaseServer
+    .from("products")
+    .select(`
+      id,
+      title,
+      slug,
+      description,
+      short_description,
+      category_id,
+      base_price_mur,
+      compare_at_price_mur,
+      sku,
+      barcode,
+      is_active,
+      is_featured,
+      is_best_seller,
+      sort_order,
+      seo_title,
+      seo_description,
+      created_at,
+      updated_at,
+      product_images (
+        id,
+        product_id,
+        image_url,
+        alt,
+        sort_order,
+        is_primary,
+        created_at,
+        storage_path,
+        bucket,
+        storage_bucket
+      ),
+      product_variants (
+        id,
+        product_id,
+        options_json,
+        sku,
+        price_mur,
+        compare_at_price_mur,
+        stock_qty,
+        is_active,
+        created_at,
+        updated_at
+      )
+    `)
+    .eq("is_active", true)
+    .eq("is_best_seller", true)
+    .order("sort_order", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("getBestSellerProductsForHome error:", error);
+    return [];
+  }
+
+  return ((data ?? []) as ProductQueryRow[])
+    .filter((p) => p.is_active === true && p.is_best_seller === true)
+    .map(normalizeProduct);
+}
+
+
 export async function getRelatedProducts(
   categoryId: string | null,
   currentProductId: string
@@ -238,6 +369,87 @@ export async function getRelatedProducts(
 
   if (error) {
     console.error("getRelatedProducts error:", error);
+    return [];
+  }
+
+  return ((data ?? []) as ProductQueryRow[]).map(normalizeProduct);
+}
+
+export async function getUnbadgedProducts(
+  excludeIds: string[] = [],
+  limit = 15
+): Promise<ProductWithRelations[]> {
+  let query = supabaseServer
+    .from("products")
+    .select(`
+      id,
+      title,
+      slug,
+      description,
+      short_description,
+      category_id,
+      base_price_mur,
+      compare_at_price_mur,
+      sku,
+      barcode,
+      is_active,
+      is_featured,
+      is_best_seller,
+      sort_order,
+      seo_title,
+      seo_description,
+      created_at,
+      updated_at,
+      categories (
+        id,
+        name,
+        slug,
+        description,
+        image_url,
+        is_active,
+        sort_order
+      ),
+      product_images (
+        id,
+        product_id,
+        image_url,
+        alt,
+        sort_order,
+        is_primary,
+        created_at,
+        storage_path,
+        bucket,
+        storage_bucket
+      ),
+      product_variants (
+        id,
+        product_id,
+        options_json,
+        sku,
+        price_mur,
+        compare_at_price_mur,
+        stock_qty,
+        is_active,
+        created_at,
+        updated_at
+      )
+    `)
+    .eq("is_active", true)
+    .eq("is_featured", false)
+    .eq("is_best_seller", false)
+    .order("created_at", { ascending: false })
+    .order("sort_order", { ascending: true })
+    .limit(limit);
+
+  if (excludeIds.length > 0) {
+    const safeIds = excludeIds.map((id) => `"${id}"`).join(",");
+    query = query.not("id", "in", `(${safeIds})`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("getUnbadgedProducts error:", error);
     return [];
   }
 

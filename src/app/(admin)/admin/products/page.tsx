@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,38 +34,8 @@ export default function AdminProductsPage() {
   const [items, setItems] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-
-    async function init() {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
-
-      if (!alive) return;
-
-      if (error || !session?.access_token) {
-        setErr("Not logged in");
-        setToken(null);
-        return;
-      }
-
-      setToken(session.access_token);
-    }
-
-    init();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   async function load(nextQ?: string) {
-    if (!token) return;
-
     setLoading(true);
     setErr(null);
 
@@ -76,14 +45,16 @@ export default function AdminProductsPage() {
       const res = await fetch(
         `/api/admin/products/list?q=${encodeURIComponent(qq)}&limit=150`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: "include",
+          cache: "no-store",
         }
       );
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed");
+
+      if (!res.ok) {
+        throw new Error(json?.error || "Failed to load products");
+      }
 
       setItems(json.items ?? []);
     } catch (e: any) {
@@ -95,9 +66,9 @@ export default function AdminProductsPage() {
   }
 
   useEffect(() => {
-    if (token) load("");
+    load("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, []);
 
   const stats = useMemo(() => {
     const total = items.length;
@@ -109,7 +80,6 @@ export default function AdminProductsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Title row */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-1.5 text-[12px] text-black/60 shadow-[0_10px_30px_-25px_rgba(0,0,0,0.25)]">
@@ -119,7 +89,7 @@ export default function AdminProductsPage() {
           <h1 className="mt-3 text-2xl sm:text-3xl font-semibold tracking-tight text-black">
             Manage Products
           </h1>
-          <p className="text-sm text-black/60 mt-1">
+          <p className="mt-1 text-sm text-black/60">
             Search, edit details, upload images, and control visibility.
           </p>
         </div>
@@ -131,23 +101,21 @@ export default function AdminProductsPage() {
             onClick={() => load()}
             disabled={loading}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Refresh
           </Button>
 
-          {/* Optional: if you have a create page later */}
           <Button
             asChild
             className="rounded-2xl bg-[#ff6fa0] text-white hover:bg-[#ff4f8c]"
           >
             <Link href="/admin/products/new">
-              <Plus className="h-4 w-4 mr-2" /> New Product
+              <Plus className="mr-2 h-4 w-4" /> New Product
             </Link>
           </Button>
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid gap-3 sm:grid-cols-4">
         <Card className="rounded-[22px] border-black/10 bg-white">
           <CardContent className="p-4">
@@ -155,18 +123,21 @@ export default function AdminProductsPage() {
             <div className="mt-1 text-xl font-semibold text-black">{stats.total}</div>
           </CardContent>
         </Card>
+
         <Card className="rounded-[22px] border-black/10 bg-white">
           <CardContent className="p-4">
             <div className="text-[12px] text-black/55">Active</div>
             <div className="mt-1 text-xl font-semibold text-black">{stats.active}</div>
           </CardContent>
         </Card>
+
         <Card className="rounded-[22px] border-black/10 bg-white">
           <CardContent className="p-4">
             <div className="text-[12px] text-black/55">Featured</div>
             <div className="mt-1 text-xl font-semibold text-black">{stats.featured}</div>
           </CardContent>
         </Card>
+
         <Card className="rounded-[22px] border-black/10 bg-white">
           <CardContent className="p-4">
             <div className="text-[12px] text-black/55">Best Seller</div>
@@ -175,21 +146,20 @@ export default function AdminProductsPage() {
         </Card>
       </div>
 
-      {/* Search */}
       <Card className="rounded-[26px] border-black/10 bg-white">
         <CardHeader className="pb-3">
           <CardTitle className="text-base text-black">Search</CardTitle>
         </CardHeader>
         <CardContent>
           <form
-            className="flex flex-col sm:flex-row gap-2"
+            className="flex flex-col gap-2 sm:flex-row"
             onSubmit={(e) => {
               e.preventDefault();
               load();
             }}
           >
             <div className="relative flex-1">
-              <Search className="h-4 w-4 text-black/40 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-black/40" />
               <Input
                 className="h-11 rounded-2xl border-black/10 bg-white pl-10 text-black placeholder:text-black/40"
                 value={q}
@@ -197,52 +167,56 @@ export default function AdminProductsPage() {
                 placeholder="Search by title, slug, sku…"
               />
             </div>
+
             <Button
               className="h-11 rounded-2xl bg-black text-white hover:bg-black/90"
               type="submit"
               disabled={loading}
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Search
             </Button>
           </form>
 
-          {err ? (
-            <div className="mt-3 text-sm text-red-600">{err}</div>
-          ) : null}
+          {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
         </CardContent>
       </Card>
 
-      {/* Desktop table */}
       <Card className="rounded-[26px] border-black/10 bg-white">
         <CardHeader className="pb-3">
           <CardTitle className="text-base text-black">Products</CardTitle>
         </CardHeader>
 
         <CardContent className="p-0">
-          {/* Desktop */}
-          <div className="hidden lg:block overflow-auto">
+          <div className="hidden overflow-auto lg:block">
             <table className="w-full text-sm">
               <thead className="text-black/60">
                 <tr className="border-b border-black/10 bg-black/[0.02]">
-                  <th className="py-3 px-4 text-left font-medium">Title</th>
-                  <th className="py-3 px-4 text-left font-medium">Slug</th>
-                  <th className="py-3 px-4 text-left font-medium">Flags</th>
-                  <th className="py-3 px-4 text-right font-medium">Price</th>
-                  <th className="py-3 px-4 text-right font-medium">Action</th>
+                  <th className="px-4 py-3 text-left font-medium">Title</th>
+                  <th className="px-4 py-3 text-left font-medium">Slug</th>
+                  <th className="px-4 py-3 text-left font-medium">Flags</th>
+                  <th className="px-4 py-3 text-right font-medium">Price</th>
+                  <th className="px-4 py-3 text-right font-medium">Action</th>
                 </tr>
               </thead>
+
               <tbody>
                 {items.map((p) => (
-                  <tr key={p.id} className="border-b border-black/10 last:border-b-0 hover:bg-black/[0.02] transition">
-                    <td className="py-3 px-4">
+                  <tr
+                    key={p.id}
+                    className="border-b border-black/10 transition hover:bg-black/[0.02] last:border-b-0"
+                  >
+                    <td className="px-4 py-3">
                       <div className="font-medium text-black">{p.title}</div>
                       <div className="text-xs text-black/45">
-                        Sort: {p.sort_order ?? 0} • {new Date(p.created_at).toLocaleDateString()}
+                        Sort: {p.sort_order ?? 0} •{" "}
+                        {new Date(p.created_at).toLocaleDateString()}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-black/70">{p.slug}</td>
-                    <td className="py-3 px-4">
+
+                    <td className="px-4 py-3 text-black/70">{p.slug}</td>
+
+                    <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
                         <Badge
                           className={cx(
@@ -254,29 +228,33 @@ export default function AdminProductsPage() {
                         >
                           {p.is_active ? "ACTIVE" : "INACTIVE"}
                         </Badge>
+
                         {p.is_featured ? (
-                          <Badge className="rounded-2xl bg-[#ffe6ef] text-black border border-black/10">
+                          <Badge className="rounded-2xl border border-black/10 bg-[#ffe6ef] text-black">
                             FEATURED
                           </Badge>
                         ) : null}
+
                         {p.is_best_seller ? (
-                          <Badge className="rounded-2xl bg-black text-white border border-black">
+                          <Badge className="rounded-2xl border border-black bg-black text-white">
                             BEST SELLER
                           </Badge>
                         ) : null}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-right font-semibold text-black">
+
+                    <td className="px-4 py-3 text-right font-semibold text-black">
                       {fmtMUR(p.base_price_mur)}
                     </td>
-                    <td className="py-3 px-4 text-right">
+
+                    <td className="px-4 py-3 text-right">
                       <Button
                         asChild
                         variant="outline"
-                        className="rounded-2xl border-black/10 bg-white hover:bg-black/[0.02] text-black"
+                        className="rounded-2xl border-black/10 bg-white text-black hover:bg-black/[0.02]"
                       >
                         <Link href={`/admin/products/${p.id}`}>
-                          Edit <ArrowUpRight className="h-4 w-4 ml-1" />
+                          Edit <ArrowUpRight className="ml-1 h-4 w-4" />
                         </Link>
                       </Button>
                     </td>
@@ -294,16 +272,20 @@ export default function AdminProductsPage() {
             </table>
           </div>
 
-          {/* Mobile cards */}
-          <div className="lg:hidden p-4 space-y-3">
+          <div className="space-y-3 p-4 lg:hidden">
             {items.map((p) => (
-              <div key={p.id} className="rounded-[22px] border border-black/10 bg-white p-4 shadow-[0_16px_55px_-45px_rgba(0,0,0,0.25)]">
+              <div
+                key={p.id}
+                className="rounded-[22px] border border-black/10 bg-white p-4 shadow-[0_16px_55px_-45px_rgba(0,0,0,0.25)]"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-semibold text-black truncate">{p.title}</div>
-                    <div className="text-xs text-black/55 truncate">{p.slug}</div>
+                    <div className="truncate font-semibold text-black">{p.title}</div>
+                    <div className="truncate text-xs text-black/55">{p.slug}</div>
                   </div>
-                  <div className="text-right font-semibold text-black">{fmtMUR(p.base_price_mur)}</div>
+                  <div className="text-right font-semibold text-black">
+                    {fmtMUR(p.base_price_mur)}
+                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -317,13 +299,15 @@ export default function AdminProductsPage() {
                   >
                     {p.is_active ? "ACTIVE" : "INACTIVE"}
                   </Badge>
+
                   {p.is_featured ? (
-                    <Badge className="rounded-2xl bg-[#ffe6ef] text-black border border-black/10">
+                    <Badge className="rounded-2xl border border-black/10 bg-[#ffe6ef] text-black">
                       FEATURED
                     </Badge>
                   ) : null}
+
                   {p.is_best_seller ? (
-                    <Badge className="rounded-2xl bg-black text-white border border-black">
+                    <Badge className="rounded-2xl border border-black bg-black text-white">
                       BEST SELLER
                     </Badge>
                   ) : null}
@@ -333,10 +317,10 @@ export default function AdminProductsPage() {
                   <Button
                     asChild
                     variant="outline"
-                    className="rounded-2xl border-black/10 bg-white hover:bg-black/[0.02] text-black"
+                    className="rounded-2xl border-black/10 bg-white text-black hover:bg-black/[0.02]"
                   >
                     <Link href={`/admin/products/${p.id}`}>
-                      Edit <ArrowUpRight className="h-4 w-4 ml-1" />
+                      Edit <ArrowUpRight className="ml-1 h-4 w-4" />
                     </Link>
                   </Button>
                 </div>

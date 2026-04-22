@@ -5,10 +5,21 @@ import { requireAdmin } from "@/lib/admin/requireAdmin";
 export async function POST(req: Request) {
   try {
     const admin = await requireAdmin();
-    if (!admin.ok) { return NextResponse.json({ error: admin.error }, { status: admin.status }); }
+    if (!admin.ok) {
+      return NextResponse.json(
+        { error: admin.error },
+        { status: admin.status }
+      );
+    }
 
     const { id, patch } = await req.json();
-    if (!id || !patch) return NextResponse.json({ error: "Missing id/patch" }, { status: 400 });
+
+    if (!id || !patch) {
+      return NextResponse.json(
+        { error: "Missing id/patch" },
+        { status: 400 }
+      );
+    }
 
     const allowedKeys = [
       "title",
@@ -28,7 +39,7 @@ export async function POST(req: Request) {
       "seo_description",
     ];
 
-    const safePatch: any = {};
+    const safePatch: Record<string, unknown> = {};
     for (const k of allowedKeys) {
       if (k in patch) safePatch[k] = patch[k];
     }
@@ -45,7 +56,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, product: data });
   } catch (err: any) {
     console.error("admin/products/update error:", err);
-    return NextResponse.json({ error: err?.message || "Failed" }, { status: 500 });
+    return NextResponse.json(
+      { error: err?.message || "Failed" },
+      { status: 500 }
+    );
   }
 }
-
