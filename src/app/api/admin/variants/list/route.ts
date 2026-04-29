@@ -26,21 +26,53 @@ export async function GET(req: Request) {
 
     const { data, error } = await supabaseAdmin
       .from("product_variants")
-      .select(
-        "id,product_id,options_json,sku,price_mur,compare_at_price_mur,stock_qty,is_active,created_at,updated_at"
-      )
+      .select(`
+        id,
+        product_id,
+        options_json,
+        options_key,
+        sku,
+        price_mur,
+        compare_at_price_mur,
+        stock_qty,
+        is_active,
+        created_at,
+        updated_at,
+        variant_images (
+          id,
+          variant_id,
+          image_url,
+          alt,
+          sort_order,
+          created_at
+        )
+      `)
       .eq("product_id", productId)
       .order("created_at", { ascending: true });
 
     if (error) throw error;
 
-    return NextResponse.json({ items: data ?? [] });
+    const items = (data ?? []).map((row: any) => ({
+      ...row,
+      variant_images: Array.isArray(row.variant_images)
+        ? row.variant_images
+            .slice()
+            .sort(
+              (a: any, b: any) =>
+                Number(a?.sort_order ?? 0) - Number(b?.sort_order ?? 0) ||
+                String(a?.created_at ?? "").localeCompare(
+                  String(b?.created_at ?? "")
+                )
+            )
+        : [],
+    }));
+
+    return NextResponse.json({ ok: true, items });
   } catch (err: any) {
     console.error("admin/variants/list error:", err);
     return NextResponse.json(
-      { error: err?.message || "Failed" },
+      { error: err?.message || "Failed to load variants" },
       { status: 500 }
     );
   }
 }
-

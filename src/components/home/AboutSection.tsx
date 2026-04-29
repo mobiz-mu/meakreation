@@ -75,7 +75,7 @@ export default function AboutSection() {
             <div className="md:col-span-7 p-6 md:p-10 flex flex-col justify-center">
               <div className="text-[15px] md:text-[16px] leading-relaxed text-neutral-800">
                 <p>
-                  Atelier de Méa is a small Mauritian brand born from a simple idea:
+                  Atelier de Mea is a small Mauritian brand born from a simple idea:
                   help everyday queens feel beautiful, confident and comfortable in
                   their own style — with handmade turbans, outfits and bags crafted
                   with love in Roche Bois.

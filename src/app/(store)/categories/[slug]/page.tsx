@@ -2,22 +2,16 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import CollectionPageClient from "@/components/store/CollectionPageClient";
 import {
-  getActiveCategories,
   getCategoryBySlug,
   getProductsByCategoryId,
 } from "@/lib/storefront";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type Props = {
   params: Promise<{ slug: string }>;
 };
-
-export async function generateStaticParams() {
-  const categories = await getActiveCategories();
-
-  return categories.map((category) => ({
-    slug: category.slug,
-  }));
-}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;

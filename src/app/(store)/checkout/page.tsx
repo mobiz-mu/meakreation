@@ -17,12 +17,12 @@ async function getShippingMethods(): Promise<ShippingMethod[]> {
     {
       id: "790203ba-147f-47ea-a456-22ef3c2bc4de",
       name: "Postage (Normal)",
-      price_mur: 75,
+      price_mur: 80,
     },
     {
       id: "b4c6d5b6-dac2-44ae-960b-cdf0b8991af3",
       name: "Postage (Express)",
-      price_mur: 100,
+      price_mur: 125,
     },
     {
       id: "7dc31447-c4cb-4caf-867c-f13855d57664",

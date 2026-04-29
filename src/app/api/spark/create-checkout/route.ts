@@ -3,9 +3,10 @@ import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase/server-admin";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function mustEnv(name: string) {
-  const v = process.env[name];
+  const v = process.env[name]?.trim();
   if (!v) throw new Error(`Missing env: ${name}`);
   return v;
 }
@@ -16,24 +17,24 @@ function safeSiteUrl() {
 }
 
 function getSparkEndpoint() {
-  const raw = mustEnv("SPARK_BASE_URL").trim();
+  const raw = mustEnv("SPARK_BASE_URL");
 
-  // If user already stored full endpoint, use it directly
   if (raw.includes("orderData.faces") || raw.includes("?")) {
     return raw;
   }
 
-  // Otherwise assume base URL and append /checkout
   return raw.endsWith("/") ? `${raw}checkout` : `${raw}/checkout`;
 }
 
 async function getAuthedUserId(req: Request) {
   const auth = req.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+
   if (!token) return null;
 
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data?.user?.id) return null;
+
   return data.user.id;
 }
 
@@ -49,6 +50,26 @@ async function parseResponseSafe(resp: Response) {
   } catch {
     return { rawText: text, data: null };
   }
+}
+
+function findCheckoutUrl(data: any) {
+  return (
+    data?.checkoutUrl ||
+    data?.checkout_url ||
+    data?.paymentUrl ||
+    data?.payment_url ||
+    data?.redirectUrl ||
+    data?.redirect_url ||
+    data?.url ||
+    data?.data?.checkoutUrl ||
+    data?.data?.checkout_url ||
+    data?.data?.paymentUrl ||
+    data?.data?.payment_url ||
+    data?.data?.redirectUrl ||
+    data?.data?.redirect_url ||
+    data?.data?.url ||
+    null
+  );
 }
 
 export async function POST(req: Request) {
@@ -69,19 +90,21 @@ export async function POST(req: Request) {
 
     const authedUserId = await getAuthedUserId(req);
 
-    const { data: order, error: oErr } = await supabaseAdmin
+    const { data: order, error: orderErr } = await supabaseAdmin
       .from("orders")
       .select("id,order_no,user_id,total_mur,public_token,payment_status,status")
       .eq("id", orderId)
       .maybeSingle();
 
-    if (oErr) throw oErr;
+    if (orderErr) throw orderErr;
+
     if (!order?.id) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
     const isOwner =
       authedUserId && order.user_id && authedUserId === order.user_id;
+
     const isGuestAllowed =
       !order.user_id && publicToken && publicToken === order.public_token;
 
@@ -89,29 +112,43 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not allowed" }, { status: 403 });
     }
 
-    if (order.payment_status === "PAID" || order.status === "PAID") {
+    if (
+      String(order.payment_status).toUpperCase() === "PAID" ||
+      String(order.status).toUpperCase() === "PAID"
+    ) {
       return NextResponse.json({ error: "Order already paid" }, { status: 409 });
     }
 
     const merchantTransactionId = `MK-${crypto.randomUUID()}`;
 
-    // Match your current storefront routes
     const successUrl = `${SITE}/checkout/success?t=${encodeURIComponent(
       order.public_token
     )}`;
-    const cancelUrl = `${SITE}/checkout/success?t=${encodeURIComponent(
+
+    const failureUrl = `${SITE}/checkout/success?t=${encodeURIComponent(
       order.public_token
     )}`;
+
     const webhookUrl = `${SITE}/api/spark/webhook`;
 
     const payload = {
-      merchantTransactionId,
       storeId: SPARK_STORE_ID,
-      amount: Number(order.total_mur),
-      currency: "MUR",
-      returnUrl: successUrl,
-      cancelUrl,
-      webhookUrl,
+      merchantTransactionId,
+      transactionOrigin: "ECOM",
+      transactionType: "SALE",
+      transactionAmount: {
+        total: Number(order.total_mur),
+        currency: "MUR",
+      },
+      checkoutSettings: {
+        locale: "en_GB",
+        preSelectedPaymentMethod: "Cards",
+        webHooksUrl: webhookUrl,
+        redirectBackUrls: {
+          successUrl,
+          failureUrl,
+        },
+      },
     };
 
     const resp = await fetch(SPARK_ENDPOINT, {
@@ -128,6 +165,13 @@ export async function POST(req: Request) {
     const rawText = parsed.rawText;
 
     if (!resp.ok) {
+      console.error("SPARK FAILED:", {
+        endpoint: SPARK_ENDPOINT,
+        status: resp.status,
+        request: payload,
+        response: sparkData ?? rawText,
+      });
+
       await supabaseAdmin.from("payment_events").insert({
         provider: "SPARK",
         merchant_transaction_id: merchantTransactionId,
@@ -146,6 +190,7 @@ export async function POST(req: Request) {
           details:
             sparkData?.message ||
             sparkData?.error ||
+            sparkData?.errorMessage ||
             rawText ||
             resp.statusText,
         },
@@ -153,20 +198,39 @@ export async function POST(req: Request) {
       );
     }
 
-    const checkoutUrl =
-      sparkData?.checkoutUrl || sparkData?.checkout_url || sparkData?.url;
+    const checkoutUrl = findCheckoutUrl(sparkData);
 
     if (!checkoutUrl) {
+      console.error("SPARK MISSING CHECKOUT URL:", {
+        endpoint: SPARK_ENDPOINT,
+        status: resp.status,
+        request: payload,
+        response: sparkData ?? rawText,
+      });
+
+      await supabaseAdmin.from("payment_events").insert({
+        provider: "SPARK",
+        merchant_transaction_id: merchantTransactionId,
+        event_type: "CREATE_CHECKOUT",
+        event_status: "ERROR",
+        payload: {
+          request: payload,
+          response: sparkData ?? rawText,
+          http: resp.status,
+          reason: "Missing checkout URL",
+        },
+      });
+
       return NextResponse.json(
         {
           error: "Missing checkoutUrl from Spark",
-          details: rawText || "Spark did not return a checkout URL.",
+          details: (sparkData ?? rawText) || "Spark did not return a checkout URL.",
         },
         { status: 502 }
       );
     }
 
-    const { error: psErr } = await supabaseAdmin
+    const { error: sessionErr } = await supabaseAdmin
       .from("payment_sessions")
       .upsert(
         {
@@ -185,9 +249,9 @@ export async function POST(req: Request) {
         { onConflict: "order_id,provider" }
       );
 
-    if (psErr) throw psErr;
+    if (sessionErr) throw sessionErr;
 
-    const { error: updErr } = await supabaseAdmin
+    const { error: updateErr } = await supabaseAdmin
       .from("orders")
       .update({
         payment_method: "SPARK",
@@ -197,14 +261,17 @@ export async function POST(req: Request) {
       })
       .eq("id", orderId);
 
-    if (updErr) throw updErr;
+    if (updateErr) throw updateErr;
 
     await supabaseAdmin.from("payment_events").insert({
       provider: "SPARK",
       merchant_transaction_id: merchantTransactionId,
       event_type: "CREATE_CHECKOUT",
       event_status: "PENDING",
-      payload: { request: payload, response: sparkData ?? rawText },
+      payload: {
+        request: payload,
+        response: sparkData ?? rawText,
+      },
     });
 
     return NextResponse.json({
@@ -214,8 +281,11 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     console.error("spark/create-checkout error:", error);
+
     return NextResponse.json(
-      { error: error?.message || "Failed" },
+      {
+        error: error?.message || "Spark checkout failed",
+      },
       { status: 500 }
     );
   }
