@@ -27,7 +27,6 @@ import {
 
 const STATUSES = [
   "PENDING",
-  "PENDING_PAYMENT",
   "PAID",
   "PROCESSING",
   "SHIPPED",
@@ -208,7 +207,7 @@ export default function AdminOrderDetailPage() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ order_id: id, status: next }),
+        body: JSON.stringify({ id, status: next }),
       });
 
       const json = await res.json().catch(() => ({}));
