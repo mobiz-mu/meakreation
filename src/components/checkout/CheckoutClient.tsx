@@ -12,7 +12,7 @@ type ShippingMethod = {
   price_mur: number;
 };
 
-type PaymentMethod = "COD" | "JUICE" | "BANK_TRANSFER" | "SPARK";
+type PaymentMethod = "COD" | "JUICE" | "BANK_TRANSFER";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -197,36 +197,6 @@ export default function CheckoutClient({
        );
       }
       const createJson = createParsed.data;
-
-      if (form.paymentMethod === "SPARK") {
-        const sparkRes = await fetch("/api/spark/create-checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orderId: createJson.orderId,
-            publicToken: createJson.publicToken,
-          }),
-        });
-
-        const sparkParsed = await readJsonSafe(sparkRes);
-        if (!sparkParsed.ok) {
-          throw new Error(
-           sparkParsed.data?.error || sparkParsed.error || "Unable to start Spark payment."
-        );
-       }
-       const sparkJson = sparkParsed.data;
-
-        const checkoutUrl =
-          sparkJson?.checkoutUrl || sparkJson?.checkout_url || sparkJson?.url;
-
-        if (!checkoutUrl) {
-          throw new Error("Missing Spark checkout URL.");
-        }
-
-        clear();
-        window.location.href = checkoutUrl;
-        return;
-      }
 
       clear();
 
@@ -476,19 +446,6 @@ export default function CheckoutClient({
                     }))
                   }
                 />
-
-                <PaymentCard
-                  selected={form.paymentMethod === "SPARK"}
-                  title="Pay Online — ABSA via Spark"
-                  description="Secure online payment by card through Spark."
-                  onClick={() =>
-                    setForm((p) => ({
-                      ...p,
-                      paymentMethod: "SPARK",
-                      paymentReference: "",
-                    }))
-                  }
-                />
               </div>
 
               {form.paymentMethod === "JUICE" ? (
@@ -525,14 +482,6 @@ export default function CheckoutClient({
                   </div>
                 </InfoCard>
               ) : null}
-
-              {form.paymentMethod === "SPARK" ? (
-                <InfoCard title="Online Payment">
-                  <div>
-                    You will be redirected securely to Spark to complete your payment online by card.
-                  </div>
-                </InfoCard>
-              ) : null}
             </section>
 
             <section>
@@ -556,13 +505,9 @@ export default function CheckoutClient({
                 type="submit"
                 disabled={submitting}
                 className="w-full rounded-full bg-[#8f4f63] px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submitting
-                  ? "Processing..."
-                  : form.paymentMethod === "SPARK"
-                  ? "Proceed to Online Payment"
-                  : "Confirm Order"}
-              </button>
+              >        
+            {submitting ? "Processing..." : "Confirm Order"}            
+             </button>
             </div>
           </div>
         </form>

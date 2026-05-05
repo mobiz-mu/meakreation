@@ -8,6 +8,9 @@ export const metadata: Metadata = {
   description: "Browse all handmade products from Mea Kréation.",
 };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type Props = {
   searchParams: Promise<{
     category?: string;

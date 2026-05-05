@@ -14,6 +14,8 @@ import {
 import { supabaseServer } from "@/lib/supabase/server-public";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function siteUrl() {
   const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";

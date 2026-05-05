@@ -5,12 +5,36 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 const SOCIALS = [
-  { name: "Facebook", href: "#", icon: "/socialmedia/facebook.png" },
-  { name: "Instagram", href: "#", icon: "/socialmedia/instagram.png" },
-  { name: "LinkedIn", href: "#", icon: "/socialmedia/linkedin.png" },
-  { name: "TikTok", href: "#", icon: "/socialmedia/tiktok.png" },
-  { name: "WhatsApp", href: "#", icon: "/socialmedia/whatsapp.png" },
-  { name: "YouTube", href: "#", icon: "/socialmedia/youtube.png" },
+  {
+    name: "Facebook",
+    href: "https://www.facebook.com/profile.php?id=61560820059138",
+    icon: "/socialmedia/facebook.png",
+  },
+  {
+    name: "Instagram",
+    href: "https://www.instagram.com/mea_kreation",
+    icon: "/socialmedia/instagram.png",
+  },
+  {
+    name: "LinkedIn",
+    href: "https://www.linkedin.com/in/mea-kréation-6908971aa",
+    icon: "/socialmedia/linkedin.png",
+  },
+  {
+    name: "TikTok",
+    href: "https://www.tiktok.com/@mea.kreation",
+    icon: "/socialmedia/tiktok.png",
+  },
+  {
+    name: "WhatsApp",
+    href: "https://wa.me/2309117549",
+    icon: "/socialmedia/whatsapp.png",
+  },
+  {
+    name: "YouTube",
+    href: "https://youtube.com/@meakreation",
+    icon: "/socialmedia/youtube.png",
+  },
 ];
 
 export default function AboutSection() {
@@ -38,7 +62,7 @@ export default function AboutSection() {
         {/* Title centered */}
         <div className="text-center">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">
-            The Story Behind Atelier de Méa
+            The Story Behind Atelier de Mea
           </h2>
           <p className="mt-2 text-sm md:text-base text-muted-foreground">
             Handmade pieces crafted with love in Mauritius
@@ -93,10 +117,12 @@ export default function AboutSection() {
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 {SOCIALS.map((s) => (
                   <Link
-                    key={s.name}
-                    href={s.href}
-                    aria-label={s.name}
-                    className="group inline-flex items-center justify-center h-10 w-10 rounded-full border bg-white/80 backdrop-blur hover:bg-white shadow-sm hover:shadow-md transition"
+                     key={s.name}
+                     href={s.href}
+                     aria-label={`Follow Mea Kréation on ${s.name}`}
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     className="group inline-flex items-center justify-center h-10 w-10 rounded-full border bg-white/80 backdrop-blur hover:bg-white shadow-sm hover:shadow-md transition"
                   >
                     <span className="relative h-5 w-5">
                       <Image

@@ -153,10 +153,10 @@ export async function getProductBySlug(
     `)
     .eq("slug", slug)
     .eq("is_active", true)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    console.error("getProductBySlug error:", error);
+    if (error) {
+    console.error("getProductBySlug error:", JSON.stringify(error, null, 2));
     return null;
   }
 
